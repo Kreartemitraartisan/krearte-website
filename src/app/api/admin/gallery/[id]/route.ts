@@ -12,9 +12,9 @@ export async function DELETE(
   context: RouteContext
 ) {
   try {
+    // Await params karena berbentuk Promise
     const { id } = await context.params;
 
-    // Cari data gallery
     const galleryItem = await prisma.gallery.findUnique({
       where: { id },
     });
@@ -26,19 +26,21 @@ export async function DELETE(
       );
     }
 
-    // Hapus file dari filesystem (jika ada)
+    // Hapus file dari filesystem
     try {
-      const imagePath = galleryItem.imageUrl.startsWith("/")
-        ? galleryItem.imageUrl.slice(1)
-        : galleryItem.imageUrl;
+      if (galleryItem.imageUrl) {
+        const imagePath = galleryItem.imageUrl.startsWith("/")
+          ? galleryItem.imageUrl.slice(1)
+          : galleryItem.imageUrl;
 
-      const filepath = join(process.cwd(), "public", imagePath);
-      await unlink(filepath);
+        const filepath = join(process.cwd(), "public", imagePath);
+        await unlink(filepath);
+      }
     } catch {
       console.log("File not found, skipping deletion");
     }
 
-    // Hapus dari database
+    // Hapus data dari database
     await prisma.gallery.delete({
       where: { id },
     });
