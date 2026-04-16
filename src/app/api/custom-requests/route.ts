@@ -5,9 +5,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Create custom request inquiry
+    /// Create custom request inquiry
     const inquiry = await prisma.inquiry.create({
-       {
+      data: {
         name: `${body.firstName} ${body.lastName}`,
         email: body.email,
         phone: body.phone,
@@ -15,7 +15,14 @@ export async function POST(request: Request) {
         dimensions: `${body.width} ${body.unit} × ${body.height} ${body.unit}`,
         timeline: body.timeline,
         budget: body.quantity,
-        message: `Custom Size Request\n\nProduct: ${body.productName}\nDimensions: ${body.width} × ${body.height} ${body.unit}\nQuantity: ${body.quantity} panels\nProject Type: ${body.projectType}\nTimeline: ${body.timeline}\nNotes: ${body.notes || "N/A"}`,
+        message: `Custom Size Request
+
+    Product: ${body.productName}
+    Dimensions: ${body.width} × ${body.height} ${body.unit}
+    Quantity: ${body.quantity} panels
+    Project Type: ${body.projectType}
+    Timeline: ${body.timeline}
+    Notes: ${body.notes || "N/A"}`,
         status: "pending",
       },
     });
