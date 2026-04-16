@@ -1,0 +1,212 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER MODEL ====================
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  password     String?
+  role         String    @default("customer")
+  phone        String?
+  address      String?
+  city         String?
+  postalCode   String?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  orders       Order[]
+  inquiries    Inquiry[]
+  wishlists    Wishlist[] @relation(name: "userWishlists")
+}
+
+// ==================== MATERIAL MODEL ====================
+model Material {
+  id            String   @id @default(cuid())
+  name          String
+  category      String // "PVC Wallcoverings" | "Metallic Collection" | "Custom Print"
+  width         String? // e.g., "1.06m"
+  pricePerM2    Float
+  designerPricePerM2 Float?
+  resellerPricePerM2 Float?
+  samplePriceA3 Float
+  waste         Float // Waste cost per m²
+  stock         Float // Total available in m²
+  is25DEligible Boolean  @default(false)
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems OrderItem[]
+}
+
+// ==================== PRODUCT MODEL ====================
+model Product {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  description    String?
+  category       String
+  price          Float // Base price (untuk referensi)
+  images         String[]
+  collectionType String   @default("wallcovering")
+  is25DEligible  Boolean  @default(false)
+  availableMaterialIds String[]
+  recommendedMaterialIds String[]
+  stock               Int            @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sizes      ProductSize[]
+  orderItems OrderItem[]
+  wishlists  Wishlist[]    @relation(name: "productWishlists")
+}
+
+// ==================== PRODUCT SIZE (DEPRECATED) ====================
+model ProductSize {
+  id        String  @id @default(cuid())
+  label     String
+  price     Float
+  stock     Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// ==================== ORDER MODEL ====================
+model Order {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id])
+  email         String
+  firstName     String
+  lastName      String
+  address       String
+  city          String
+  postalCode    String
+  phone         String?
+  items         OrderItem[]
+  subtotal      Float
+  shipping      Float       @default(0)
+  total         Float
+  status        String      @default("pending")
+  paymentStatus String      @default("pending")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  country         String?
+  notes           String?
+}
+
+// ==================== ORDER ITEM MODEL ====================
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  name      String
+  size      String // Deprecated
+
+  // New fields for material-based pricing
+  materialId   String?
+  materialName String?
+  pricePerM2   Float?
+  wasteCost    Float?
+  areaM2       Float?
+  is25DAddOn   Boolean @default(false)
+
+  // Relations
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product  Product   @relation(fields: [productId], references: [id])
+  material Material? @relation(fields: [materialId], references: [id])
+}
+
+// ==================== INQUIRY MODEL ====================
+model Inquiry {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  projectType String?
+  dimensions  String?
+  timeline    String?
+  budget      String?
+  message     String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String?
+  User   User?   @relation(fields: [userId], references: [id])
+}
+
+// ==================== WISHLIST MODEL ====================
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade, name: "userWishlists")
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade, name: "productWishlists")
+
+  @@unique([userId, productId])
+}
+
+// ==================== ADMIN MODEL ====================
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed password
+  name      String?
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==================== GALLERY MODEL ====================
+model Gallery {
+  id          String   @id @default(cuid())
+  title       String
+  imageUrl    String
+  category    String   @default("general") // residential, commercial, custom
+  description String?
+  order       Int      @default(0)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Settings {
+  id                        String   @id @default("default")
+  storeName                 String   @default("Krearte")
+  storeEmail                String   @default("hello@krearte.com")
+  storePhone                String?
+  storeAddress              String?
+  storeDescription          String?
+  currency                  String   @default("IDR")
+  timezone                  String   @default("Asia/Jakarta")
+  instagram                 String?
+  facebook                  String?
+  twitter                   String?
+  website                   String?
+  freeShippingThreshold     Float    @default(5000000)
+  domesticShippingRate      Float    @default(50000)
+  internationalShippingRate Float    @default(500000)
+  processingTime            String   @default("3-5")
+  metaTitle                 String   @default("Krearte | Luxury Wallcoverings")
+  metaDescription           String?
+  keywords                  String?
+  ogImage                   String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
