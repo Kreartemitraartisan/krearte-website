@@ -27,7 +27,7 @@ interface Order {
 
 export default function MyAccountPage() {
   const router = useRouter();
-  const {  session, status } = useSession();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState({

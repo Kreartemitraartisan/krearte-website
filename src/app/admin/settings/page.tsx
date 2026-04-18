@@ -23,7 +23,7 @@ import {
 
 export default function AdminSettingsPage() {
   const router = useRouter();
-  const {  session, update: updateSession } = useSession();
+  const { data: session, update: updateSession} = useSession();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("store");
 

@@ -32,9 +32,9 @@ interface CartItem {
 
 export default function WishlistPage() {
   const router = useRouter();
-  const {  session, status } = useSession();
+  const { data: session, status } = useSession();
   const {  wishlist, removeFromWishlist, loading: wishlistLoading } = useWishlist();
-  const { addToCart } = useCart(); // ✅ Import cart function
+  const { addToCart } = useCart();
   
   const [mountedWishlist, setMountedWishlist] = useState<WishlistItem[]>([]);
   const [isClient, setIsClient] = useState(false);

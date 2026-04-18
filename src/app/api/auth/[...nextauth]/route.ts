@@ -65,8 +65,7 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/login",
-    signUp: "/register",
-    error: "/login", // Error code passed in query string as ?error=
+    error: "/login", 
   },
   callbacks: {
     async jwt({ token, user }) {

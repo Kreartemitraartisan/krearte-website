@@ -190,11 +190,10 @@ async function main() {
 
     // ✅ FIX 3: Create relations dengan syntax yang benar
     for (const material of allMaterials) {
-      await prisma.productMaterial.create({
-        data: {  // ← Harus pakai "data:"
-          productId: product.id,
-          materialId: material.id,
-          isRecommended: recommendedIds.includes(material.id),
+      await prisma.product.update({
+        where: { id: product.id },
+        data: {
+          availableMaterialIds: allMaterials.map(m => m.id),
         },
       });
     }

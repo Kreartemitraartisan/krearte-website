@@ -9,7 +9,7 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { name, email, currentPassword, newPassword } = body;
 
-    // Find admin user
+    // 🔍 Find admin user
     const admin = await prisma.user.findFirst({
       where: { role: "admin" },
     });
@@ -21,7 +21,9 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Verify current password if changing password
+    // =========================
+    // 🔐 PASSWORD UPDATE
+    // =========================
     if (newPassword) {
       if (!currentPassword) {
         return NextResponse.json(
@@ -30,7 +32,19 @@ export async function PUT(request: Request) {
         );
       }
 
-      const isValid = await bcrypt.compare(currentPassword, admin.password);
+      // ✅ FIX: handle nullable password
+      if (!admin.password) {
+        return NextResponse.json(
+          { success: false, error: "Admin password not set" },
+          { status: 400 }
+        );
+      }
+
+      const isValid = await bcrypt.compare(
+        currentPassword,
+        admin.password
+      );
+
       if (!isValid) {
         return NextResponse.json(
           { success: false, error: "Current password is incorrect" },
@@ -38,23 +52,33 @@ export async function PUT(request: Request) {
         );
       }
 
-      // Hash new password
+      if (newPassword.length < 6) {
+        return NextResponse.json(
+          { success: false, error: "New password must be at least 6 characters" },
+          { status: 400 }
+        );
+      }
+
+      // 🔒 Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-      // Update with new password
       await prisma.user.update({
         where: { id: admin.id },
-         data: {
+        data: {
           name,
           email,
           password: hashedPassword,
         },
       });
-    } else {
-      // Update without password change
+    } 
+    
+    // =========================
+    // 👤 PROFILE UPDATE ONLY
+    // =========================
+    else {
       await prisma.user.update({
         where: { id: admin.id },
-         data: {
+        data: {
           name,
           email,
         },
@@ -63,14 +87,14 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
+      message: "Profile updated successfully",
     });
+
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error("❌ Error updating profile:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update profile" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

@@ -27,7 +27,7 @@ interface OrderItem {
 
 export default function OrderHistoryPage() {
   const router = useRouter();
-  const {  session, status } = useSession();
+ const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
