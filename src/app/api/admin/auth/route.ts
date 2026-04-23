@@ -1,54 +1,67 @@
+// src/app/api/admin/auth/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+// ✅ Gunakan prisma singleton (JANGAN new PrismaClient()!)
 import { prisma } from "@/lib/prisma";
-import { createAdminToken } from "@/lib/admin";
-import bcrypt from "bcryptjs";
 
-export async function POST(request: Request) {
+// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function GET() {
   try {
-    const { email, password } = await request.json();
+    const session = await getServerSession(authOptions);
 
-    const admin = await prisma.admin.findUnique({
-      where: { email },
-    });
-
-    if (!admin) {
+    // ✅ Check if user is logged in
+    if (!session?.user?.email) {
       return NextResponse.json(
-        { success: false, error: "Invalid credentials" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    const validPassword = await bcrypt.compare(password, admin.password);
+    // ✅ Check if user is admin
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+    });
 
-    if (!validPassword) {
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: "Invalid credentials" },
-        { status: 401 }
+        { success: false, error: "User not found" },
+        { status: 404 }
       );
     }
 
-    const token = await createAdminToken(admin.email);
+    // ✅ Only allow admin role
+    if (user.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Admin access required" },
+        { status: 403 }
+      );
+    }
 
-    const response = NextResponse.json({ success: true });
-    response.cookies.set("admin_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 86400, // 24 hours
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
 
-    return response;
   } catch (error) {
-    console.error("Auth error:", error);
+    console.error("Error checking admin auth:", error);
     return NextResponse.json(
-      { success: false, error: "Authentication failed" },
+      { success: false, error: "Failed to verify admin access" },
       { status: 500 }
     );
   }
-}
-
-export async function DELETE() {
-  const response = NextResponse.json({ success: true });
-  response.cookies.delete("admin_token");
-  return response;
 }
