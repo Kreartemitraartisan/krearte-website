@@ -1,3 +1,4 @@
+// src/app/account/profile/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -43,28 +44,13 @@ export default function ProfilePage() {
     wishlistItems: 0,
   });
 
-  // Debug log
-  console.log('🔍 ProfilePage render', {
-    status,
-    hasSession: !!session?.user,
-    userEmail: session?.user?.email,
-  });
-
   // ✅ Fetch user data from API
   const fetchUserData = async () => {
     try {
-      console.log('📡 [STEP 1] fetchUserData called');
-      console.log('📡 [STEP 2] Fetching from API...');
-      
       const response = await fetch("/api/account/profile");
-      console.log('📡 [STEP 3] Response received:', response.status);
-      
       const result = await response.json();
-      console.log('📡 [STEP 4] API result:', result);
       
       if (result.success && result.user) {
-        console.log('📡 [STEP 5] Setting profile ', result.user);
-        
         setProfileData({
           name: result.user.name || "",
           email: result.user.email || "",
@@ -73,21 +59,9 @@ export default function ProfilePage() {
           city: result.user.city || "",
           postalCode: result.user.postalCode || "",
         });
-        
-        console.log('✅ Profile data loaded successfully!');
-        console.log('📋 Profile data:', {
-          name: result.user.name,
-          email: result.user.email,
-          phone: result.user.phone,
-          address: result.user.address,
-          city: result.user.city,
-          postalCode: result.user.postalCode,
-        });
-      } else {
-        console.error('❌ API returned success: false or no user');
       }
     } catch (error) {
-      console.error('❌ Error fetching user ', error);
+      // Error handled silently or via UI
     }
   };
 
@@ -101,11 +75,11 @@ export default function ProfilePage() {
         setStats(result.stats);
       }
     } catch (error) {
-      console.error("Error fetching stats:", error);
+      // Error handled silently or via UI
     }
   };
 
-  // ✅ Simple approach - just fetch on mount
+  // ✅ Fetch data when authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login?callbackUrl=/account/profile");
@@ -113,11 +87,10 @@ export default function ProfilePage() {
     }
 
     if (status === "authenticated") {
-      console.log('📡 Authenticated, fetching profile data...');
       fetchUserData();
       fetchStats();
     }
-  }, [status, router]);  // ← Remove session from dependencies
+  }, [status, router]);
 
   // ✅ Handle profile update
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -150,7 +123,6 @@ export default function ProfilePage() {
         setError(result.error || "Failed to update profile");
       }
     } catch (error) {
-      console.error("Profile update error:", error);
       setError("Failed to update profile");
     } finally {
       setLoading(false);
@@ -164,7 +136,6 @@ export default function ProfilePage() {
     setError("");
     setSuccess("");
 
-    // Validation
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setError("New passwords do not match");
       setLoading(false);
@@ -201,7 +172,6 @@ export default function ProfilePage() {
         setError(result.error || "Failed to change password");
       }
     } catch (error) {
-      console.error("Password update error:", error);
       setError("Failed to change password");
     } finally {
       setLoading(false);
