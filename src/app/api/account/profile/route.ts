@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { PrismaClient } from "@prisma/client";
+// ✅ Gunakan prisma singleton (JANGAN new PrismaClient() di level modul!)
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // ✅ GET - Fetch user profile data
 export async function GET() {
@@ -157,9 +160,6 @@ export async function PUT(request: Request) {
       });
     }
 
-    // =========================
-    // ❌ INVALID TYPE
-    // =========================
     return NextResponse.json(
       { success: false, error: "Invalid type. Use 'profile' or 'password'" },
       { status: 400 }
