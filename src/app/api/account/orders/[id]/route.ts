@@ -1,19 +1,12 @@
+// src/app/api/account/orders/[id]/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { PrismaClient } from "@prisma/client";
-
-// ✅ 1. Import authOptions dari file terpisah (tanpa special chars)
-// Pindahkan authOptions ke: lib/auth.ts atau lib/next-auth.ts
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-// ✅ 2. Singleton pattern untuk PrismaClient (mencegah multiple connections)
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-
-const prisma = globalForPrisma.prisma || new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// ✅ PENTING: Paksa route ini berjalan di runtime (tidak di-generate saat build)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   request: Request,
@@ -23,7 +16,6 @@ export async function GET(
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      // ✅ 3. Check user.id (bukan email) untuk konsistensi
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -32,6 +24,7 @@ export async function GET(
 
     const { id } = await params;
 
+    // ✅ Gunakan prisma singleton untuk fetch order
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
@@ -58,7 +51,7 @@ export async function GET(
       );
     }
 
-    // ✅ 4. Pastikan session.user.id ada sebelum compare
+    // ✅ Validasi kepemilikan order
     if (!session.user.id || order.userId !== session.user.id) {
       return NextResponse.json(
         { success: false, error: "Forbidden" },
@@ -87,5 +80,4 @@ export async function GET(
       { status: 500 }
     );
   }
-  // ✅ 5. Hapus prisma.$disconnect() - tidak diperlukan di API routes Next.js
 }
