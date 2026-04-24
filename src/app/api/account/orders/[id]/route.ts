@@ -4,12 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const runtime = "nodejs";
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } } // ✅ FIX DI SINI (BUKAN Promise)
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -21,15 +19,7 @@ export async function GET(
       );
     }
 
-    // ✅ params harus di-await
-    const { id } = await context.params;
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Invalid order ID" },
-        { status: 400 }
-      );
-    }
+    const { id } = params; // ✅ langsung ambil, tanpa await
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -70,19 +60,14 @@ export async function GET(
         ...order,
         createdAt: order.createdAt.toISOString(),
         updatedAt: order.updatedAt.toISOString(),
-        items: order.items.map((item) => ({
-          ...item,
-          productName: item.product?.name || "Unknown Product",
-          productImage: item.product?.images?.[0] || "",
-        })),
       },
     });
 
   } catch (error) {
-    console.error("Error fetching order detail:", error);
+    console.error("Error fetching order:", error);
 
     return NextResponse.json(
-      { success: false, error: "Failed to fetch order detail" },
+      { success: false, error: "Failed to fetch order" },
       { status: 500 }
     );
   }
