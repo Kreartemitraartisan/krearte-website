@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -6,8 +7,8 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } } // ✅ FIX DI SINI (BUKAN Promise)
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> } // ✅ sesuai type Next.js
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -19,7 +20,8 @@ export async function GET(
       );
     }
 
-    const { id } = params; // ✅ langsung ambil, tanpa await
+    // ✅ FIX: await params karena Promise
+    const { id } = await context.params;
 
     const order = await prisma.order.findUnique({
       where: { id },
