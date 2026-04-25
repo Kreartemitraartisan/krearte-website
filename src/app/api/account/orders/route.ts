@@ -1,15 +1,21 @@
-// src/app/api/account/orders/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
 
-// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // ✅ Lazy load semua dependency
+    const [{ prisma }, { getServerSession }, { authOptions }] =
+      await Promise.all([
+        import("@/lib/prisma"),
+        import("next-auth"),
+        import("@/lib/auth"),
+      ]);
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -19,7 +25,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // ✅ Fetch semua order milik user yang login
     const orders = await prisma.order.findMany({
       where: { userId: session.user.id },
       include: {
@@ -27,7 +32,7 @@ export async function GET(request: Request) {
           include: { product: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({
@@ -40,7 +45,8 @@ export async function GET(request: Request) {
     });
 
   } catch (error) {
-    console.error("Error fetching orders:", error);
+    console.error("ORDERS API ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch orders" },
       { status: 500 }
