@@ -25,30 +25,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const orders = await prisma.order.findMany({
-      where: { userId: session.user.id },
-      include: {
-        items: {
-          include: { product: true },
-        },
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        postalCode: true,
+        createdAt: true,
       },
-      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({
       success: true,
-      orders: orders.map((order) => ({
-        ...order,
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-      })),
+      user: user
+        ? {
+            ...user,
+            createdAt: user.createdAt.toISOString(),
+          }
+        : null,
     });
 
   } catch (error) {
-    console.error("ORDERS API ERROR:", error);
+    console.error("PROFILE API ERROR:", error);
 
     return NextResponse.json(
-      { success: false, error: "Failed to fetch orders" },
+      { success: false, error: "Failed to fetch profile" },
       { status: 500 }
     );
   }

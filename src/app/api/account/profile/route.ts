@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-// ✅ Gunakan prisma singleton (JANGAN new PrismaClient() di level modul!)
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
 
-// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
-// ✅ GET - Fetch user profile data
+// =========================
+// ✅ GET PROFILE
+// =========================
 export async function GET() {
   try {
+    const [{ prisma }, { getServerSession }, { authOptions }] =
+      await Promise.all([
+        import("@/lib/prisma"),
+        import("next-auth"),
+        import("@/app/api/auth/[...nextauth]/route"),
+      ]);
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -44,10 +49,15 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      user,
+      user: {
+        ...user,
+        createdAt: user.createdAt.toISOString(),
+      },
     });
+
   } catch (error) {
-    console.error("❌ GET profile error:", error);
+    console.error("GET PROFILE ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch profile" },
       { status: 500 }
@@ -55,9 +65,23 @@ export async function GET() {
   }
 }
 
-// ✅ PUT - Update profile or password
+// =========================
+// ✅ UPDATE PROFILE / PASSWORD
+// =========================
 export async function PUT(request: Request) {
   try {
+    const [
+      { prisma },
+      { getServerSession },
+      { authOptions },
+      bcrypt
+    ] = await Promise.all([
+      import("@/lib/prisma"),
+      import("next-auth"),
+      import("@/app/api/auth/[...nextauth]/route"),
+      import("bcryptjs"),
+    ]);
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -81,14 +105,11 @@ export async function PUT(request: Request) {
       );
     }
 
-    // =========================
     // 🔐 PASSWORD UPDATE
-    // =========================
     if (type === "password") {
-      // ✅ handle user tanpa password (OAuth case)
       if (!user.password) {
         return NextResponse.json(
-          { success: false, error: "Password not set for this account" },
+          { success: false, error: "Password not set" },
           { status: 400 }
         );
       }
@@ -100,14 +121,14 @@ export async function PUT(request: Request) {
 
       if (!isValid) {
         return NextResponse.json(
-          { success: false, error: "Current password is incorrect" },
+          { success: false, error: "Wrong password" },
           { status: 400 }
         );
       }
 
       if (!data.newPassword || data.newPassword.length < 6) {
         return NextResponse.json(
-          { success: false, error: "New password must be at least 6 characters" },
+          { success: false, error: "Password min 6 char" },
           { status: 400 }
         );
       }
@@ -121,13 +142,11 @@ export async function PUT(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "Password changed successfully",
+        message: "Password updated",
       });
     }
 
-    // =========================
     // 👤 PROFILE UPDATE
-    // =========================
     if (type === "profile") {
       if (data.email && data.email !== user.email) {
         const existingUser = await prisma.user.findUnique({
@@ -136,7 +155,7 @@ export async function PUT(request: Request) {
 
         if (existingUser) {
           return NextResponse.json(
-            { success: false, error: "Email already in use" },
+            { success: false, error: "Email already used" },
             { status: 400 }
           );
         }
@@ -156,16 +175,18 @@ export async function PUT(request: Request) {
 
       return NextResponse.json({
         success: true,
-        message: "Profile updated successfully",
+        message: "Profile updated",
       });
     }
 
     return NextResponse.json(
-      { success: false, error: "Invalid type. Use 'profile' or 'password'" },
+      { success: false, error: "Invalid type" },
       { status: 400 }
     );
+
   } catch (error) {
-    console.error("❌ PUT profile error:", error);
+    console.error("PUT PROFILE ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to update profile" },
       { status: 500 }
