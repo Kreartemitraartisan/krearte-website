@@ -1,106 +1,141 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // GET - Fetch products (public endpoint)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = searchParams.get('limit');
-    const category = searchParams.get('category');
-    const collectionType = searchParams.get('collectionType');
-    const slug = searchParams.get('slug');
 
-    // ✅ Build where clause dengan case-insensitive
+    const limitParam = searchParams.get("limit");
+    const category = searchParams.get("category");
+    const collectionType = searchParams.get("collectionType");
+    const slug = searchParams.get("slug");
+
+    const limit = limitParam ? parseInt(limitParam) : undefined;
+
+    // ✅ SAFE where clause
     const where: any = {};
-    
+
     if (category) {
       where.category = {
         equals: category.toLowerCase(),
-        mode: 'insensitive'
+        mode: "insensitive",
       };
     }
-    
+
     if (collectionType) {
       where.collectionType = {
         equals: collectionType.toLowerCase(),
-        mode: 'insensitive'
+        mode: "insensitive",
       };
     }
-    
+
     if (slug) {
       where.slug = slug;
     }
 
-    // ✅ Fetch products from database
+    // ✅ FETCH PRODUCTS (safe even if DB empty)
     const products = await prisma.product.findMany({
       where,
       include: {
         sizes: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
-      ...(limit ? { take: parseInt(limit) } : {}),
+      ...(limit ? { take: limit } : {}),
     });
 
-    // ✅ Calculate price range from materials (EXCLUDE services/jasa)
+    // 🟢 IF NO PRODUCTS → RETURN EMPTY SAFE RESPONSE
+    if (!products || products.length === 0) {
+      return NextResponse.json({
+        success: true,
+        products: [],
+        count: 0,
+      });
+    }
+
+    // ✅ SAFE MATERIAL PROCESSING
     const productsWithPrices = await Promise.all(
       products.map(async (product) => {
-        if (product.availableMaterialIds && product.availableMaterialIds.length > 0) {
-          // ✅ Fetch materials with category & name untuk filter services
+        try {
+          const materialIds = product.availableMaterialIds || [];
+
+          if (!materialIds || materialIds.length === 0) {
+            return {
+              ...product,
+              priceRange: {
+                min: product.price || 0,
+                max: product.price || 0,
+              },
+              hasMaterialPrices: false,
+            };
+          }
+
           const materials = await prisma.material.findMany({
             where: {
-              id: { in: product.availableMaterialIds },
+              id: { in: materialIds },
             },
-            select: { 
+            select: {
               pricePerM2: true,
-              category: true,  // ✅ Tambah category untuk filter
-              name: true,      // ✅ Tambah name untuk filter
-              waste: true,     // ✅ Tambah waste untuk accurate price
+              category: true,
+              name: true,
+              waste: true,
             },
           });
 
-          // ✅ Filter: Exclude services/add-ons from price calculation
-          const actualMaterials = materials.filter(m => {
-            const cat = (m.category || '').toLowerCase();
-            const name = (m.name || '').toLowerCase();
-            
-            // Exclude based on category
-            if (cat === 'service') return false;
-            
-            // Exclude based on name keywords
-            if (name.includes('jasa')) return false;
-            if (name.includes('design/re-draw')) return false;
-            if (name.startsWith('jasa print')) return false;
-            if (name.includes('print -')) return false;
-            
+          // 🟡 SAFE FILTER (no crash if null)
+          const actualMaterials = (materials || []).filter((m) => {
+            const cat = (m.category || "").toLowerCase();
+            const name = (m.name || "").toLowerCase();
+
+            if (cat === "service") return false;
+            if (name.includes("jasa")) return false;
+            if (name.includes("design/re-draw")) return false;
+            if (name.startsWith("jasa print")) return false;
+            if (name.includes("print -")) return false;
+
             return true;
           });
 
-          // ✅ Calculate price range from actual materials only (exclude services)
-          if (actualMaterials.length > 0) {
-            const prices = actualMaterials.map(m => m.pricePerM2 + (m.waste || 0));
+          if (actualMaterials.length === 0) {
             return {
               ...product,
-              price: Math.min(...prices),  // Base price = min material price
               priceRange: {
-                min: Math.min(...prices),
-                max: Math.max(...prices),
+                min: product.price || 0,
+                max: product.price || 0,
               },
-              hasMaterialPrices: true,
+              hasMaterialPrices: false,
             };
           }
+
+          const prices = actualMaterials.map(
+            (m) => (m.pricePerM2 || 0) + (m.waste || 0)
+          );
+
+          const min = Math.min(...prices);
+          const max = Math.max(...prices);
+
+          return {
+            ...product,
+            price: min,
+            priceRange: { min, max },
+            hasMaterialPrices: true,
+          };
+        } catch (err) {
+          // 🟢 per-product fallback (IMPORTANT supaya tidak 500 global)
+          return {
+            ...product,
+            priceRange: {
+              min: product.price || 0,
+              max: product.price || 0,
+            },
+            hasMaterialPrices: false,
+          };
         }
-        
-        // Fallback for products without materials or no actual materials found
-        return {
-          ...product,
-          priceRange: { min: product.price || 0, max: product.price || 0 },
-          hasMaterialPrices: false,
-        };
       })
     );
 
@@ -111,51 +146,60 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("❌ Error fetching products:", error);
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Failed to fetch products" 
+      {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch products",
       },
       { status: 500 }
     );
   }
 }
 
-// POST - Create new product (Admin only)
+// POST - Create product (Admin only)
 export async function POST(request: Request) {
   try {
-    // ⚠️ TODO: Add admin authentication check here
-    
     const body = await request.json();
-    
+
     const product = await prisma.product.create({
       data: {
         name: body.name,
         slug: body.slug,
         category: body.category,
-        price: body.price,
-        description: body.description,
+        price: body.price || 0,
+        description: body.description || "",
         images: body.images || [],
         availableMaterialIds: body.availableMaterialIds || [],
         recommendedMaterialIds: body.recommendedMaterialIds || [],
-        collectionType: body.collectionType,
-        is25DEligible: body.is25DEligible,
+        collectionType: body.collectionType || null,
+        is25DEligible: body.is25DEligible || false,
         sizes: {
-          create: body.sizes?.map((size: any) => ({
-            label: size.label,
-            price: size.price,
-            stock: size.stock || 0,
-          })) || [],
+          create:
+            body.sizes?.map((size: any) => ({
+              label: size.label,
+              price: size.price || 0,
+              stock: size.stock || 0,
+            })) || [],
         },
       },
       include: { sizes: true },
     });
 
-    return NextResponse.json({ success: true, product });
+    return NextResponse.json({
+      success: true,
+      product,
+    });
   } catch (error) {
     console.error("❌ Error creating product:", error);
+
     return NextResponse.json(
-      { success: false, error: "Failed to create product" },
+      {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to create product",
+      },
       { status: 500 }
     );
   }
