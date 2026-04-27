@@ -1,28 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { prisma } from "@/lib/prisma";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
-
+// =========================
 // ✅ GET - Fetch single product
+// =========================
 export async function GET(
   request: NextRequest,
-  context: RouteContext
+  context: any
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = context.params;
+
+    // ✅ Lazy imports (WAJIB)
+    const { prisma } = await import("@/lib/prisma");
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
 
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "admin") {
+
+    if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true },
+    });
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
       );
     }
 
@@ -38,9 +52,14 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, product });
+    return NextResponse.json({
+      success: true,
+      product,
+    });
+
   } catch (error) {
-    console.error("❌ GET error:", error);
+    console.error("GET PRODUCT ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch product" },
       { status: 500 }
@@ -48,21 +67,38 @@ export async function GET(
   }
 }
 
+// =========================
 // ✅ PUT - Update product
+// =========================
 export async function PUT(
   request: NextRequest,
-  context: RouteContext
+  context: any
 ) {
   try {
-    console.log("\n========== 🔍 DEBUG PUT REQUEST ==========");
+    const { id } = context.params;
 
-    const { id } = await context.params;
+    const { prisma } = await import("@/lib/prisma");
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
 
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "admin") {
+
+    if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true },
+    });
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
       );
     }
 
@@ -74,28 +110,30 @@ export async function PUT(
       category: body.category,
       price: Number(body.price),
       stock: Number(body.stock),
-      description: body.description,
-      collectionType: body.collectionType,
+      description: body.description || null,
+      collectionType: body.collectionType || "wallcovering",
     };
 
-    // Handle images
+    // images
     if (Array.isArray(body.images)) {
       updateData.images = body.images;
     }
 
-    // Optional fields
+    // optional fields
     if (body.is25DEligible !== undefined) {
       updateData.is25DEligible = body.is25DEligible;
     }
+
     if (Array.isArray(body.availableMaterialIds)) {
       updateData.availableMaterialIds = body.availableMaterialIds;
     }
+
     if (Array.isArray(body.recommendedMaterialIds)) {
       updateData.recommendedMaterialIds = body.recommendedMaterialIds;
     }
 
-    // Handle sizes
-    if (body.sizes && Array.isArray(body.sizes)) {
+    // sizes
+    if (Array.isArray(body.sizes)) {
       updateData.sizes = {
         deleteMany: {},
         create: body.sizes.map((size: any) => ({
@@ -112,9 +150,14 @@ export async function PUT(
       include: { sizes: true },
     });
 
-    return NextResponse.json({ success: true, product });
+    return NextResponse.json({
+      success: true,
+      product,
+    });
+
   } catch (error) {
-    console.error("❌ ERROR IN PUT:", error);
+    console.error("UPDATE PRODUCT ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to update product" },
       { status: 500 }
@@ -122,19 +165,38 @@ export async function PUT(
   }
 }
 
+// =========================
 // ✅ DELETE - Delete product
+// =========================
 export async function DELETE(
   request: NextRequest,
-  context: RouteContext
+  context: any
 ) {
   try {
-    const { id } = await context.params;
+    const { id } = context.params;
+
+    const { prisma } = await import("@/lib/prisma");
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
 
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "admin") {
+
+    if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true },
+    });
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
       );
     }
 
@@ -146,8 +208,10 @@ export async function DELETE(
       success: true,
       message: "Product deleted",
     });
+
   } catch (error) {
-    console.error("❌ DELETE error:", error);
+    console.error("DELETE PRODUCT ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to delete product" },
       { status: 500 }

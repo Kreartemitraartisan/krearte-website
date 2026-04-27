@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { prisma } from "@/lib/prisma";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
-// GET - Fetch all products
+
+// =========================
+// ✅ GET - Fetch all products
+// =========================
 export async function GET() {
   try {
+    // ✅ Lazy import (WAJIB)
+    const { prisma } = await import("@/lib/prisma");
+
     const products = await prisma.product.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: { sizes: true },
     });
 
@@ -18,7 +22,10 @@ export async function GET() {
       products,
       count: products.length,
     });
+
   } catch (error) {
+    console.error("GET PRODUCTS ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch products" },
       { status: 500 }
@@ -26,18 +33,47 @@ export async function GET() {
   }
 }
 
-// POST - Create product
+// =========================
+// ✅ POST - Create product (Admin only)
+// =========================
 export async function POST(request: NextRequest) {
   try {
+    // ✅ Lazy import semua (WAJIB)
+    const { prisma } = await import("@/lib/prisma");
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
+
     const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "admin") {
+
+    if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
 
+    // ✅ Validasi admin dari DB (lebih aman dari sekadar session)
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { role: true },
+    });
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
+
+    // ✅ Basic validation
+    if (!body.name || !body.slug || !body.price) {
+      return NextResponse.json(
+        { success: false, error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
 
     const product = await prisma.product.create({
       data: {
@@ -45,14 +81,20 @@ export async function POST(request: NextRequest) {
         slug: body.slug,
         category: body.category,
         price: Number(body.price),
-        stock: Number(body.stock),
-        description: body.description,
+        stock: Number(body.stock || 0),
+        description: body.description || null,
         images: body.images || [],
       },
     });
 
-    return NextResponse.json({ success: true, product });
+    return NextResponse.json({
+      success: true,
+      product,
+    });
+
   } catch (error) {
+    console.error("CREATE PRODUCT ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to create product" },
       { status: 500 }
