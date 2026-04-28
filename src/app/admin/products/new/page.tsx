@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2, Upload, Sparkles, Film, Image as ImageIcon } from "lucide-react";
-import { slugify , formatCurrency } from "@/lib/utils";
+import { slugify, formatCurrency } from "@/lib/utils";
+import { createClient } from "@supabase/supabase-js";
 
 interface Material {
   id: string;
@@ -13,19 +14,22 @@ interface Material {
   pricePerM2: number;
   waste: number;
   width: string;
+  designerPricePerM2?: number;
+  resellerPricePerM2?: number;
 }
 
 export default function NewProductPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   
-  // ✅ Fetch materials dari database
+  // Fetch materials dari database
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(true);
   
-  // ✅ Updated formData with stock field
+  // Form data with stock field
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
@@ -33,14 +37,20 @@ export default function NewProductPage() {
     category: "wallcovering",
     collectionType: "wallcovering",
     is25DEligible: false,
-    stock: 0, // ✅ Added stock field
+    stock: 0,
     availableMaterialIds: [] as string[],
     recommendedMaterialIds: [] as string[],
   });
 
   const [images, setImages] = useState<string[]>([]);
 
-  // ✅ Fetch materials dari API
+  // Initialize Supabase client (client-side, pakai ANON key)
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  // Fetch materials dari API
   useEffect(() => {
     async function fetchMaterials() {
       try {
@@ -48,9 +58,13 @@ export default function NewProductPage() {
         const result = await response.json();
         
         if (result.success) {
+          // Filter out services/jasa, hanya ambil material fisik
           const materialsOnly = result.materials.filter((m: Material) => {
             const category = m.category?.toLowerCase() || '';
-            return !category.includes('jasa') && !category.includes('service');
+            return !category.includes('jasa') && 
+                   !category.includes('service') && 
+                   !category.includes('add-on') &&
+                   m.pricePerM2 > 0; // Hanya yang ada harga per m2
           });
           
           setMaterials(materialsOnly);
@@ -84,44 +98,83 @@ export default function NewProductPage() {
     }
   };
 
+  // ✅ FIX: Upload LANGSUNG ke Supabase Storage (bypass Vercel API)
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    setUploadProgress(0);
     
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const formDataUpload = new FormData();
-        formDataUpload.append("file", file);
-        formDataUpload.append("type", type);
         
-        if (formData.slug) {
-          const fileExtension = file.name.split(".").pop();
-          const fileName = `${formData.slug}-${i + 1}.${fileExtension}`;
-          formDataUpload.append("slug", fileName.replace(`.${fileExtension}`, ""));
+        // Validasi file
+        const isVideo = type === "video";
+        const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024; // 100MB video, 20MB image
+        const allowedTypes = isVideo 
+          ? ["video/mp4", "video/webm", "video/quicktime"]
+          : ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error(`File type not allowed. Allowed: ${isVideo ? "MP4, WebM, MOV" : "JPG, PNG, GIF, WebP"}`);
+        }
+        
+        if (file.size > maxSize) {
+          throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        const response = await fetch("/api/admin/upload", {
-          method: "POST",
-          body: formDataUpload,
-        });
+        // Generate unique filename
+        const ext = file.name.split(".").pop();
+        const safeName = file.name.split(".")[0].replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const folder = isVideo ? "videos" : "products";
+        const fileName = `${folder}/${timestamp}-${random}-${safeName}.${ext}`;
 
-        const result = await response.json();
-        
-        if (result.success) {
-          setImages(prev => [...prev, result.url]);
-        } else {
-          alert(result.error || "Upload failed!");
+        // Simulasi progress (karena Supabase JS SDK belum expose progress event)
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => Math.min(prev + 10, 90));
+        }, 200);
+
+        // Upload LANGSUNG ke Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(fileName, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type,
+          });
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+
+        if (uploadError) {
+          console.error("Supabase upload error:", uploadError);
+          throw new Error(uploadError.message || "Failed to upload to Supabase");
         }
+
+        // Dapatkan public URL
+        const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
+        
+        if (!data?.publicUrl) {
+          throw new Error("Failed to get public URL");
+        }
+
+        // Tambah ke state images
+        setImages(prev => [...prev, data.publicUrl]);
+        
+        // Reset progress setelah brief delay
+        setTimeout(() => setUploadProgress(0), 500);
       }
-    } catch (error) {
-      console.error("Error uploading media:", error);
-      setError("Failed to upload media");
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      setError(err.message || "Failed to upload media");
+      alert(`❌ ${err.message || "Upload failed!"}`);
     } finally {
       setUploading(false);
-      e.target.value = "";
+      e.target.value = ""; // Reset input
     }
   };
 
@@ -197,6 +250,7 @@ export default function NewProductPage() {
       router.push("/admin/products");
     } catch (err: any) {
       setError(err.message || "Failed to create product");
+      alert(`❌ ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -239,7 +293,7 @@ export default function NewProductPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Basic Info - WITH STOCK FIELD */}
+        {/* Basic Info */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Basic Information</h2>
           
@@ -293,7 +347,7 @@ export default function NewProductPage() {
               </select>
             </div>
 
-            {/* ✅ Stock Field - NEW */}
+            {/* Stock Field */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">
                 Stock (units)
@@ -415,13 +469,17 @@ export default function NewProductPage() {
               />
               <label
                 htmlFor="image-upload"
-                className="cursor-pointer inline-flex items-center gap-3 px-6 py-3 bg-krearte-black text-krearte-white rounded-full text-sm font-medium hover:bg-krearte-charcoal transition-colors disabled:opacity-50"
+                className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
+                  uploading 
+                    ? "bg-krearte-gray-400 cursor-not-allowed" 
+                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
+                }`}
               >
                 <Upload className="w-4 h-4" />
-                {uploading ? "Uploading..." : "Upload Images"}
+                {uploading ? `Uploading... ${uploadProgress}%` : "Upload Images"}
               </label>
               <p className="text-sm text-krearte-gray-500 mt-2">
-                PNG, JPG, WebP up to 10MB
+                PNG, JPG, GIF, WebP up to 20MB
               </p>
             </div>
           </div>
@@ -435,7 +493,7 @@ export default function NewProductPage() {
             <div className="border-2 border-dashed border-krearte-gray-300 rounded-lg p-6 text-center">
               <input
                 type="file"
-                accept="video/mp4,video/webm"
+                accept="video/mp4,video/webm,video/quicktime"
                 multiple
                 onChange={(e) => handleMediaUpload(e, "video")}
                 disabled={uploading}
@@ -444,13 +502,17 @@ export default function NewProductPage() {
               />
               <label
                 htmlFor="video-upload"
-                className="cursor-pointer inline-flex items-center gap-3 px-6 py-3 bg-krearte-black text-krearte-white rounded-full text-sm font-medium hover:bg-krearte-charcoal transition-colors disabled:opacity-50"
+                className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
+                  uploading 
+                    ? "bg-krearte-gray-400 cursor-not-allowed" 
+                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
+                }`}
               >
                 <Upload className="w-4 h-4" />
-                {uploading ? "Uploading..." : "Upload Videos"}
+                {uploading ? `Uploading... ${uploadProgress}%` : "Upload Videos"}
               </label>
               <p className="text-sm text-krearte-gray-500 mt-2">
-                MP4 or WebM up to 50MB
+                MP4, WebM, MOV up to 100MB
               </p>
             </div>
           </div>
@@ -459,7 +521,7 @@ export default function NewProductPage() {
           {images.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               {images.map((media, index) => {
-                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm');
+                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov');
                 
                 return (
                   <div key={index} className="relative aspect-square bg-krearte-gray-100 rounded-lg overflow-hidden group">
@@ -469,6 +531,7 @@ export default function NewProductPage() {
                         className="w-full h-full object-cover"
                         muted
                         playsInline
+                        controls={false}
                       />
                     ) : (
                       <img
@@ -678,13 +741,14 @@ export default function NewProductPage() {
           ) : (
             <div className="space-y-6">
               {(() => {
-                // ✅ Filter services from materials
+                // Filter services from materials
                 const services = materials.filter(m => {
                   const cat = m.category.toLowerCase();
                   return cat.includes('service') || 
                         cat.includes('jasa') || 
                         cat.includes('print') ||
-                        cat.includes('design');
+                        cat.includes('design') ||
+                        cat.includes('add-on');
                 });
 
                 if (services.length === 0) {
@@ -742,7 +806,7 @@ export default function NewProductPage() {
                 : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
             }`}
           >
-            {loading ? "Creating..." : uploading ? "Uploading..." : loadingMaterials ? "Loading Materials..." : "Create Product"}
+            {loading ? "Creating..." : uploading ? `Uploading ${uploadProgress}%...` : loadingMaterials ? "Loading Materials..." : "Create Product"}
           </button>
         </div>
       </form>
