@@ -1,3 +1,4 @@
+// /app/api/admin/products/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,6 @@ export async function GET(
   context: any
 ) {
   try {
-    const { id } = context.params;
-
-    // ✅ Lazy imports (WAJIB)
     const { prisma } = await import("@/lib/prisma");
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
@@ -39,6 +37,9 @@ export async function GET(
         { status: 403 }
       );
     }
+
+    // ✅ FIX: Await params untuk Next.js 15+
+    const { id } = await context.params;
 
     const product = await prisma.product.findUnique({
       where: { id },
@@ -75,8 +76,6 @@ export async function PUT(
   context: any
 ) {
   try {
-    const { id } = context.params;
-
     const { prisma } = await import("@/lib/prisma");
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
@@ -102,6 +101,9 @@ export async function PUT(
       );
     }
 
+    // ✅ FIX: Await params untuk Next.js 15+
+    const { id } = await context.params;
+
     const body = await request.json();
 
     const updateData: any = {
@@ -114,12 +116,10 @@ export async function PUT(
       collectionType: body.collectionType || "wallcovering",
     };
 
-    // images
     if (Array.isArray(body.images)) {
       updateData.images = body.images;
     }
 
-    // optional fields
     if (body.is25DEligible !== undefined) {
       updateData.is25DEligible = body.is25DEligible;
     }
@@ -132,7 +132,6 @@ export async function PUT(
       updateData.recommendedMaterialIds = body.recommendedMaterialIds;
     }
 
-    // sizes
     if (Array.isArray(body.sizes)) {
       updateData.sizes = {
         deleteMany: {},
@@ -173,8 +172,6 @@ export async function DELETE(
   context: any
 ) {
   try {
-    const { id } = context.params;
-
     const { prisma } = await import("@/lib/prisma");
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
@@ -200,17 +197,62 @@ export async function DELETE(
       );
     }
 
+    // ✅ FIX: Await params untuk Next.js 15+
+    const { id } = await context.params;
+
+    // ✅ Cek apakah product ada dan apakah ada order items
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: { orderItems: true },
+    });
+
+    if (!product) {
+      return NextResponse.json(
+        { success: false, error: "Product not found" },
+        { status: 404 }
+      );
+    }
+
+    // ✅ Kalau ada order items, tolak delete
+    if (product.orderItems && product.orderItems.length > 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Cannot delete product that has been ordered. Archive it instead." 
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Hard delete product
     await prisma.product.delete({
       where: { id },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Product deleted",
+      message: "Product deleted successfully",
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("DELETE PRODUCT ERROR:", error);
+
+    if (error?.code === "P2003") {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Cannot delete: Product is referenced in orders" 
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error?.code === "P2025") {
+      return NextResponse.json(
+        { success: false, error: "Product not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(
       { success: false, error: "Failed to delete product" },
