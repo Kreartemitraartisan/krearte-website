@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+// /app/api/admin/products/route.ts
+import { NextRequest, NextResponse } from "next/server"; // ← WAJIB ADA!
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,7 +10,6 @@ export const revalidate = 0;
 // =========================
 export async function GET() {
   try {
-    // ✅ Lazy import (WAJIB)
     const { prisma } = await import("@/lib/prisma");
 
     const products = await prisma.product.findMany({
@@ -22,7 +22,6 @@ export async function GET() {
       products,
       count: products.length,
     });
-
   } catch (error) {
     console.error("GET PRODUCTS ERROR:", error);
 
@@ -34,11 +33,10 @@ export async function GET() {
 }
 
 // =========================
-// ✅ POST - Create product (Admin only)
+// ✅ POST - Create product (FIXED)
 // =========================
 export async function POST(request: NextRequest) {
   try {
-    // ✅ Lazy import semua (WAJIB)
     const { prisma } = await import("@/lib/prisma");
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
@@ -52,7 +50,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Validasi admin dari DB (lebih aman dari sekadar session)
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: { role: true },
@@ -67,8 +64,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // ✅ Basic validation
-    if (!body.name || !body.slug || !body.price) {
+    // ✅ FIX: Validasi yang benar (price: 0 tetap valid)
+    if (
+      !body.name?.trim() || 
+      !body.slug?.trim() || 
+      body.price === undefined || 
+      body.price === null
+    ) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -77,13 +79,17 @@ export async function POST(request: NextRequest) {
 
     const product = await prisma.product.create({
       data: {
-        name: body.name,
-        slug: body.slug,
-        category: body.category,
+        name: body.name.trim(),
+        slug: body.slug.trim(),
+        category: body.category || "wallcovering",
         price: Number(body.price),
-        stock: Number(body.stock || 0),
-        description: body.description || null,
-        images: body.images || [],
+        stock: Number(body.stock) || 0,
+        description: body.description?.trim() || null,
+        images: Array.isArray(body.images) ? body.images : [],
+        collectionType: body.collectionType || "wallcovering",
+        is25DEligible: Boolean(body.is25DEligible),
+        availableMaterialIds: Array.isArray(body.availableMaterialIds) ? body.availableMaterialIds : [],
+        recommendedMaterialIds: Array.isArray(body.recommendedMaterialIds) ? body.recommendedMaterialIds : [],
       },
     });
 
@@ -91,7 +97,6 @@ export async function POST(request: NextRequest) {
       success: true,
       product,
     });
-
   } catch (error) {
     console.error("CREATE PRODUCT ERROR:", error);
 
