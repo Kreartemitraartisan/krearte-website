@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2, Upload, Sparkles, Film, Image as ImageIcon } from "lucide-react";
 import { slugify, formatCurrency } from "@/lib/utils";
-// ✅ FIX: Import singleton Supabase client (bukan createClient langsung)
 import { supabase } from "@/lib/supabase-client";
 
 interface Material {
@@ -26,11 +25,9 @@ export default function NewProductPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   
-  // Fetch materials dari database
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(true);
   
-  // Form data with stock field
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
@@ -45,7 +42,7 @@ export default function NewProductPage() {
 
   const [images, setImages] = useState<string[]>([]);
 
-  // Fetch materials dari API
+  // ✅ FIX: Fetch ALL materials (termasuk services/add-ons), filter nanti di UI
   useEffect(() => {
     async function fetchMaterials() {
       try {
@@ -53,16 +50,8 @@ export default function NewProductPage() {
         const result = await response.json();
         
         if (result.success) {
-          // Filter out services/jasa, hanya ambil material fisik
-          const materialsOnly = result.materials.filter((m: Material) => {
-            const category = m.category?.toLowerCase() || '';
-            return !category.includes('jasa') && 
-                   !category.includes('service') && 
-                   !category.includes('add-on') &&
-                   m.pricePerM2 > 0; // Hanya yang ada harga per m2
-          });
-          
-          setMaterials(materialsOnly);
+          // Simpan SEMUA materials tanpa filter
+          setMaterials(result.materials);
         }
       } catch (error) {
         console.error("Error fetching materials:", error);
@@ -73,6 +62,32 @@ export default function NewProductPage() {
     
     fetchMaterials();
   }, []);
+
+  // ✅ Helper functions untuk memisahkan tipe material
+  const isPhysicalMaterial = (m: Material) => {
+    const cat = m.category?.toLowerCase() || '';
+    return !cat.includes('jasa') && 
+           !cat.includes('service') && 
+           !cat.includes('add-on') &&
+           !cat.includes('print') &&
+           !cat.includes('design') &&
+           m.pricePerM2 > 0;
+  };
+
+  const isServiceOrAddon = (m: Material) => !isPhysicalMaterial(m);
+
+  // ✅ Filter & group materials untuk display
+  const physicalMaterials = materials.filter(isPhysicalMaterial);
+  const services = materials.filter(isServiceOrAddon);
+
+  const materialsByCategory = physicalMaterials.reduce((acc, material) => {
+    const category = material.category || 'Other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(material);
+    return acc;
+  }, {} as Record<string, Material[]>);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -93,7 +108,6 @@ export default function NewProductPage() {
     }
   };
 
-  // ✅ FIX: Upload LANGSUNG ke Supabase Storage (bypass Vercel API)
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -105,9 +119,8 @@ export default function NewProductPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Validasi file
         const isVideo = type === "video";
-        const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024; // 100MB video, 20MB image
+        const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
         const allowedTypes = isVideo 
           ? ["video/mp4", "video/webm", "video/quicktime"]
           : ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -120,7 +133,6 @@ export default function NewProductPage() {
           throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        // Generate unique filename
         const ext = file.name.split(".").pop();
         const safeName = file.name.split(".")[0].replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
         const timestamp = Date.now();
@@ -128,12 +140,10 @@ export default function NewProductPage() {
         const folder = isVideo ? "videos" : "products";
         const fileName = `${folder}/${timestamp}-${random}-${safeName}.${ext}`;
 
-        // Simulasi progress (karena Supabase JS SDK belum expose progress event)
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => Math.min(prev + 10, 90));
         }, 200);
 
-        // Upload LANGSUNG ke Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from("uploads")
           .upload(fileName, file, {
@@ -150,17 +160,13 @@ export default function NewProductPage() {
           throw new Error(uploadError.message || "Failed to upload to Supabase");
         }
 
-        // Dapatkan public URL
         const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
         
         if (!data?.publicUrl) {
           throw new Error("Failed to get public URL");
         }
 
-        // Tambah ke state images
         setImages(prev => [...prev, data.publicUrl]);
-        
-        // Reset progress setelah brief delay
         setTimeout(() => setUploadProgress(0), 500);
       }
     } catch (err: any) {
@@ -169,7 +175,7 @@ export default function NewProductPage() {
       alert(`❌ ${err.message || "Upload failed!"}`);
     } finally {
       setUploading(false);
-      e.target.value = ""; // Reset input
+      e.target.value = "";
     }
   };
 
@@ -219,30 +225,26 @@ export default function NewProductPage() {
     });
   };
 
-  // ✅ FIX: handleSubmit dengan payload yang valid & debug log
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      // ✅ Validasi minimal
       if (!formData.name.trim()) throw new Error("Product name is required");
       if (!formData.slug.trim()) throw new Error("Slug is required");
       
-      // ✅ Pastikan images adalah array URL yang valid (bukan empty string)
       const imagePayload = images.length > 0 
         ? images.filter(url => url && url.trim() !== "") 
-        : ["/images/wallpaper-fallback.jpg"]; // Fallback image
+        : ["/images/wallpaper-fallback.jpg"];
 
-      // ✅ Payload yang sesuai dengan Prisma Schema + validasi backend
       const payload = {
         name: formData.name.trim(),
         slug: formData.slug.trim(),
         description: formData.description?.trim() || "",
         category: formData.category || "wallcovering",
-        price: 0, // Wallcovering: harga dari material, base price = 0
-        images: imagePayload, // ✅ Array dengan minimal 1 URL valid
+        price: 0,
+        images: imagePayload,
         collectionType: formData.collectionType || "wallcovering",
         is25DEligible: Boolean(formData.is25DEligible),
         stock: Number(formData.stock) || 0,
@@ -258,7 +260,6 @@ export default function NewProductPage() {
         body: JSON.stringify(payload),
       });
 
-      // 🔍 Baca response text dulu sebelum parse JSON
       const responseText = await response.text();
       console.log("📥 Raw Response:", responseText);
 
@@ -284,16 +285,6 @@ export default function NewProductPage() {
       setLoading(false);
     }
   };
-
-  // Group materials by category
-  const materialsByCategory = materials.reduce((acc, material) => {
-    const category = material.category || 'Other';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(material);
-    return acc;
-  }, {} as Record<string, Material[]>);
 
   return (
     <div className="space-y-6">
@@ -376,7 +367,6 @@ export default function NewProductPage() {
               </select>
             </div>
 
-            {/* Stock Field */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">
                 Stock (units)
@@ -395,7 +385,6 @@ export default function NewProductPage() {
               </p>
             </div>
 
-            {/* 2.5D Eligible Checkbox */}
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -598,11 +587,11 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Available Materials */}
+        {/* Available Materials - PHYSICAL ONLY */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2">Available Materials</h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">
-            Pilih material yang tersedia untuk product ini. Material yang dicentang akan muncul sebagai pilihan di halaman product.
+            Pilih material fisik yang tersedia untuk product ini.
           </p>
           
           {loadingMaterials ? (
@@ -610,10 +599,10 @@ export default function NewProductPage() {
               <div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" />
               <p className="text-sm text-krearte-gray-500">Loading materials...</p>
             </div>
-          ) : materials.length === 0 ? (
+          ) : physicalMaterials.length === 0 ? (
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-sm text-yellow-800">
-                ⚠️ No materials found. Please add materials first in the Materials section.
+                ⚠️ No physical materials found. Please add materials first in the Materials section.
               </p>
               <Link
                 href="/admin/materials"
@@ -641,8 +630,13 @@ export default function NewProductPage() {
                             : "border-krearte-gray-200 hover:border-krearte-black"
                         }`}
                       >
-                        <p className="font-normal text-sm">{material.name}</p>
-                        <p className={`text-xs ${
+                        <div className="flex items-center justify-between">
+                          <p className="font-normal text-sm">{material.name}</p>
+                          <span className="px-2 py-0.5 bg-krearte-gray-100 text-krearte-gray-600 text-xs rounded">
+                            PHYSICAL
+                          </span>
+                        </div>
+                        <p className={`text-xs mt-1 ${
                           formData.availableMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
                         }`}>
                           Rp {material.pricePerM2.toLocaleString()}/m² • {material.width}
@@ -659,7 +653,7 @@ export default function NewProductPage() {
           {formData.availableMaterialIds.length > 0 && (
             <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
               <p className="text-sm font-medium text-krearte-black mb-3">
-                Selected Materials ({formData.availableMaterialIds.length}):
+                Selected ({formData.availableMaterialIds.length}):
               </p>
               <div className="flex flex-wrap gap-2">
                 {materials
@@ -670,10 +664,13 @@ export default function NewProductPage() {
                       className="inline-flex items-center gap-2 px-3 py-1 bg-krearte-black text-krearte-white text-xs rounded-full"
                     >
                       {material.name}
+                      {isServiceOrAddon(material) && (
+                        <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] rounded">ADD-ON</span>
+                      )}
                       <button
                         type="button"
                         onClick={() => toggleAvailableMaterial(material.id)}
-                        className="hover:text-krearte-gray-300"
+                        className="hover:text-krearte-gray-300 ml-1"
                       >
                         ×
                       </button>
@@ -755,11 +752,16 @@ export default function NewProductPage() {
           </div>
         )}
 
-        {/* Services / Add-Ons Section */}
+        {/* Services / Add-Ons Section - SEPARATE */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6 mt-6">
-          <h2 className="font-sans text-lg font-normal mb-2">Available Services / Add-Ons</h2>
+          <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
+            Available Services / Add-Ons
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+              {services.length}
+            </span>
+          </h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">
-            Pilih jasa/add-on yang tersedia untuk product ini
+            Pilih jasa/add-on yang tersedia untuk product ini (opsional, bisa dicentang terpisah dari material fisik)
           </p>
           
           {loadingMaterials ? (
@@ -767,59 +769,63 @@ export default function NewProductPage() {
               <div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" />
               <p className="text-sm text-krearte-gray-500">Loading services...</p>
             </div>
+          ) : services.length === 0 ? (
+            <div className="p-4 bg-krearte-gray-50 border border-krearte-gray-200 rounded-lg">
+              <p className="text-sm text-krearte-gray-500">
+                ℹ️ No services/add-ons configured yet. Add them in Materials section with categories like "Jasa", "Service", "Add-On", "Print", or "Design".
+              </p>
+            </div>
           ) : (
             <div className="space-y-6">
+              {/* Group services by category too */}
               {(() => {
-                // Filter services from materials
-                const services = materials.filter(m => {
-                  const cat = m.category.toLowerCase();
-                  return cat.includes('service') || 
-                        cat.includes('jasa') || 
-                        cat.includes('print') ||
-                        cat.includes('design') ||
-                        cat.includes('add-on');
-                });
+                const servicesByCategory = services.reduce((acc, service) => {
+                  const category = service.category || 'Other';
+                  if (!acc[category]) acc[category] = [];
+                  acc[category].push(service);
+                  return acc;
+                }, {} as Record<string, Material[]>);
 
-                if (services.length === 0) {
-                  return (
-                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-sm text-yellow-800">
-                        ⚠️ No services found. Please add services in Materials section first.
-                      </p>
+                return Object.entries(servicesByCategory).map(([category, categoryServices]) => (
+                  <div key={category}>
+                    <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">
+                      {category}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {categoryServices.map((service) => (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => toggleAvailableMaterial(service.id)}
+                          className={`p-3 border rounded-lg text-left transition-all ${
+                            formData.availableMaterialIds.includes(service.id)
+                              ? "border-krearte-black bg-krearte-black text-krearte-white"
+                              : "border-krearte-gray-200 hover:border-krearte-black"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-normal text-sm">{service.name}</p>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                              ADD-ON
+                            </span>
+                          </div>
+                          <p className={`text-xs mt-1 ${
+                            formData.availableMaterialIds.includes(service.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
+                          }`}>
+                            {formatCurrency(service.pricePerM2)}
+                          </p>
+                        </button>
+                      ))}
                     </div>
-                  );
-                }
-
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {services.map((service) => (
-                      <button
-                        key={service.id}
-                        type="button"
-                        onClick={() => toggleAvailableMaterial(service.id)}
-                        className={`p-3 border rounded-lg text-left transition-all ${
-                          formData.availableMaterialIds.includes(service.id)
-                            ? "border-krearte-black bg-krearte-black text-krearte-white"
-                            : "border-krearte-gray-200 hover:border-krearte-black"
-                        }`}
-                      >
-                        <p className="font-normal text-sm">{service.name}</p>
-                        <p className={`text-xs ${
-                          formData.availableMaterialIds.includes(service.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
-                        }`}>
-                          {formatCurrency(service.pricePerM2)}
-                        </p>
-                      </button>
-                    ))}
                   </div>
-                );
+                ));
               })()}
             </div>
           )}
         </div>
 
         {/* Submit Button */}
-        <div className="flex items-center justify-end gap-4">
+        <div className="flex items-center justify-end gap-4 pt-4 border-t border-krearte-gray-200">
           <Link
             href="/admin/products"
             className="px-6 py-3 text-krearte-black font-medium hover:text-krearte-gray-600"
@@ -835,7 +841,7 @@ export default function NewProductPage() {
                 : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
             }`}
           >
-            {loading ? "Creating..." : uploading ? `Uploading ${uploadProgress}%...` : loadingMaterials ? "Loading Materials..." : "Create Product"}
+            {loading ? "Creating..." : uploading ? `Uploading ${uploadProgress}%...` : loadingMaterials ? "Loading..." : "Create Product"}
           </button>
         </div>
       </form>
