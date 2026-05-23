@@ -5,6 +5,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+console.log("DATABASE_URL:", process.env.DATABASE_URL);
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -71,6 +73,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-
   secret: process.env.NEXTAUTH_SECRET,
 };
