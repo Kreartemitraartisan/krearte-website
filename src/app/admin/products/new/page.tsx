@@ -42,7 +42,7 @@ export default function NewProductPage() {
 
   const [images, setImages] = useState<string[]>([]);
 
-  // ✅ FIX: Fetch ALL materials (termasuk services/add-ons), filter nanti di UI
+  // ✅ Fetch ALL materials (termasuk services/add-ons), filter nanti di UI
   useEffect(() => {
     async function fetchMaterials() {
       try {
@@ -50,7 +50,6 @@ export default function NewProductPage() {
         const result = await response.json();
         
         if (result.success) {
-          // Simpan SEMUA materials tanpa filter
           setMaterials(result.materials);
         }
       } catch (error) {
@@ -587,7 +586,7 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Available Materials - PHYSICAL ONLY */}
+        {/* Available Materials - PHYSICAL ONLY (no badge) */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2">Available Materials</h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">
@@ -630,12 +629,8 @@ export default function NewProductPage() {
                             : "border-krearte-gray-200 hover:border-krearte-black"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <p className="font-normal text-sm">{material.name}</p>
-                          <span className="px-2 py-0.5 bg-krearte-gray-100 text-krearte-gray-600 text-xs rounded">
-                            PHYSICAL
-                          </span>
-                        </div>
+                        {/* ✅ Removed PHYSICAL badge, cleaner layout */}
+                        <p className="font-normal text-sm">{material.name}</p>
                         <p className={`text-xs mt-1 ${
                           formData.availableMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
                         }`}>
@@ -777,7 +772,6 @@ export default function NewProductPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Group services by category too */}
               {(() => {
                 const servicesByCategory = services.reduce((acc, service) => {
                   const category = service.category || 'Other';
