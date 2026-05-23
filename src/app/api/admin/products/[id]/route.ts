@@ -1,16 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
-// GET - Fetch single product
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+// ✅ GET - Fetch single product
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  context: RouteContext
 ) {
   try {
-    const { id } = await params;
-    
+    const { id } = await context.params;
+
     const session = await getServerSession(authOptions);
     if (!session || session.user?.role !== "admin") {
       return NextResponse.json(
@@ -41,16 +45,16 @@ export async function GET(
   }
 }
 
-// PUT - Update product
+// ✅ PUT - Update product
 export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  context: RouteContext
 ) {
   try {
-    console.log('\n========== 🔍 DEBUG PUT REQUEST ==========');
-    
-    const { id } = await params;
-    
+    console.log("\n========== 🔍 DEBUG PUT REQUEST ==========");
+
+    const { id } = await context.params;
+
     const session = await getServerSession(authOptions);
     if (!session || session.user?.role !== "admin") {
       return NextResponse.json(
@@ -60,12 +64,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log('📝 Updating product:', id);
-    console.log('📷 IMAGES received:', body.images);
-    console.log('📷 IMAGES is Array?', Array.isArray(body.images));
-    console.log('📷 IMAGES length:', body.images?.length);
 
-    // Build update data
     const updateData: any = {
       name: body.name,
       slug: body.slug,
@@ -76,11 +75,9 @@ export async function PUT(
       collectionType: body.collectionType,
     };
 
-    // ✅ CRITICAL: Handle images
+    // Handle images
     if (Array.isArray(body.images)) {
       updateData.images = body.images;
-      console.log('✅ Images ASSIGNED:', body.images);
-      console.log('✅ Images count:', body.images.length);
     }
 
     // Optional fields
@@ -102,11 +99,9 @@ export async function PUT(
           label: size.label,
           price: Number(size.price) || 0,
           stock: Number(size.stock) || 0,
-        }))
+        })),
       };
     }
-
-    console.log('📦 Update ', updateData);
 
     const product = await prisma.product.update({
       where: { id },
@@ -114,16 +109,9 @@ export async function PUT(
       include: { sizes: true },
     });
 
-    console.log('\n✅ UPDATE RESULT:');
-    console.log('   - Product ID:', product.id);
-    console.log('   - Images from DB:', product.images);
-    console.log('   - Images count:', product.images?.length);
-    console.log('==========================================\n');
-
     return NextResponse.json({ success: true, product });
   } catch (error) {
-    console.error('\n❌ ERROR IN PUT:', error);
-    console.log('==========================================\n');
+    console.error("❌ ERROR IN PUT:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update product" },
       { status: 500 }
@@ -131,14 +119,14 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete product
+// ✅ DELETE - Delete product
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  context: RouteContext
 ) {
   try {
-    const { id } = await params;
-    
+    const { id } = await context.params;
+
     const session = await getServerSession(authOptions);
     if (!session || session.user?.role !== "admin") {
       return NextResponse.json(
@@ -147,9 +135,14 @@ export async function DELETE(
       );
     }
 
-    await prisma.product.delete({ where: { id } });
+    await prisma.product.delete({
+      where: { id },
+    });
 
-    return NextResponse.json({ success: true, message: "Product deleted" });
+    return NextResponse.json({
+      success: true,
+      message: "Product deleted",
+    });
   } catch (error) {
     console.error("❌ DELETE error:", error);
     return NextResponse.json(

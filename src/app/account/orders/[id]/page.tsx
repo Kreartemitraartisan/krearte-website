@@ -42,7 +42,7 @@ interface OrderItem {
 export default function OrderDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const {  session, status } = useSession();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<OrderDetail | null>(null);
 

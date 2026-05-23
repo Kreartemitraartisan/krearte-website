@@ -1,13 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
 // DELETE: Remove item from wishlist
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: RouteContext
 ) {
   try {
+    const { id } = await context.params;
+
     const session = await getServerSession();
 
     if (!session?.user?.email) {
@@ -30,7 +36,7 @@ export async function DELETE(
 
     await prisma.wishlist.delete({
       where: {
-        id: params.id,
+        id,
         userId: user.id,
       },
     });

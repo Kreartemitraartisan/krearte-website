@@ -48,7 +48,7 @@ export async function GET(
     }
 
     // Check if order belongs to user
-    if (order.user.email !== session.user.email) {
+    if (!order.userId || order.userId !== session.user.id) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }

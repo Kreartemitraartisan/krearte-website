@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const {  session, update: updateSession, status } = useSession();
+  const { data: session, status, update } = useSession();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -145,7 +145,7 @@ export default function ProfilePage() {
 
       if (result.success) {
         setSuccess("✅ Profile updated successfully!");
-        await updateSession();
+        await update();
       } else {
         setError(result.error || "Failed to update profile");
       }

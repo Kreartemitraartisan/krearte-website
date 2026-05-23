@@ -16,7 +16,7 @@ export async function GET() {
       );
     }
 
-    // Get user
+    // 🔍 Get user
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
@@ -28,32 +28,25 @@ export async function GET() {
       );
     }
 
-    // Get wishlist (assuming you have Wishlist model)
-    // Atau dari user.wishlistIds jika pakai field array
-    const wishlistItems = await prisma.product.findMany({
+    // ✅ FIX: ambil dari tabel Wishlist (relation)
+    const wishlist = await prisma.wishlist.findMany({
       where: {
-        id: {
-          in: user.wishlistIds || [], // Adjust sesuai schema kamu
-        },
+        userId: user.id,
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        price: true,
-        category: true,
-        images: true,
+      include: {
+        product: true,
       },
     });
 
-    const items = wishlistItems.map((product) => ({
-      id: product.id,
-      productId: product.id,
-      productName: product.name,
-      productSlug: product.slug,
-      productImage: product.images?.[0] || "",
-      price: product.price,
-      category: product.category,
+    // 🎯 Format response
+    const items = wishlist.map((item) => ({
+      id: item.id,
+      productId: item.product.id,
+      productName: item.product.name,
+      productSlug: item.product.slug,
+      productImage: item.product.images?.[0] || "",
+      price: item.product.price,
+      category: item.product.category,
     }));
 
     return NextResponse.json({
@@ -67,7 +60,5 @@ export async function GET() {
       { success: false, error: "Failed to fetch wishlist" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

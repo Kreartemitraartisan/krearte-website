@@ -9,20 +9,14 @@ const prisma = new PrismaClient();
 // ✅ GET - Fetch user profile data
 export async function GET() {
   try {
-    console.log('🔐 GET /api/account/profile - Starting...');
-    
     const session = await getServerSession(authOptions);
-    console.log('👤 Session:', session);
 
     if (!session?.user?.email) {
-      console.log('❌ No session or email');
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
-
-    console.log('📧 Fetching user:', session.user.email);
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -38,8 +32,6 @@ export async function GET() {
       },
     });
 
-    console.log('✅ User found:', user);
-
     if (!user) {
       return NextResponse.json(
         { success: false, error: "User not found" },
@@ -52,23 +44,18 @@ export async function GET() {
       user,
     });
   } catch (error) {
-    console.error('❌ GET /api/account/profile - Error:', error);
+    console.error("❌ GET profile error:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch profile" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
 // ✅ PUT - Update profile or password
 export async function PUT(request: Request) {
   try {
-    console.log('🔐 PUT /api/account/profile - Starting...');
-    
     const session = await getServerSession(authOptions);
-    console.log('👤 Session:', session);
 
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -78,8 +65,6 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    console.log('📦 Request body:', body);
-    
     const { type, ...data } = body;
 
     const user = await prisma.user.findUnique({
@@ -93,9 +78,23 @@ export async function PUT(request: Request) {
       );
     }
 
+    // =========================
+    // 🔐 PASSWORD UPDATE
+    // =========================
     if (type === "password") {
-      const isValid = await bcrypt.compare(data.currentPassword, user.password);
-      
+      // ✅ handle user tanpa password (OAuth case)
+      if (!user.password) {
+        return NextResponse.json(
+          { success: false, error: "Password not set for this account" },
+          { status: 400 }
+        );
+      }
+
+      const isValid = await bcrypt.compare(
+        data.currentPassword,
+        user.password
+      );
+
       if (!isValid) {
         return NextResponse.json(
           { success: false, error: "Current password is incorrect" },
@@ -117,12 +116,15 @@ export async function PUT(request: Request) {
         data: { password: hashedPassword },
       });
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
-        message: "Password changed successfully"
+        message: "Password changed successfully",
       });
     }
 
+    // =========================
+    // 👤 PROFILE UPDATE
+    // =========================
     if (type === "profile") {
       if (data.email && data.email !== user.email) {
         const existingUser = await prisma.user.findUnique({
@@ -149,23 +151,24 @@ export async function PUT(request: Request) {
         },
       });
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
-        message: "Profile updated successfully"
+        message: "Profile updated successfully",
       });
     }
 
+    // =========================
+    // ❌ INVALID TYPE
+    // =========================
     return NextResponse.json(
       { success: false, error: "Invalid type. Use 'profile' or 'password'" },
       { status: 400 }
     );
   } catch (error) {
-    console.error('❌ PUT /api/account/profile - Error:', error);
+    console.error("❌ PUT profile error:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update profile" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
