@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useRef } from "react";
-import Lenis from "@studio-freight/lenis";
+import Lenis from "lenis";
 
 interface SmoothScrollProps {
   children: ReactNode;
@@ -14,11 +14,11 @@ export function SmoothScroll({ children }: SmoothScrollProps) {
     // 🎬 Initialize Lenis Smooth Scroll
     const lenis = new Lenis({
       duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      easing: (t: number) =>
+        Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       direction: "vertical",
       gestureDirection: "vertical",
-      smooth: true,
-      mouseMultiplier: 1,
+      smoothWheel: true,
       smoothTouch: false,
       touchMultiplier: 2,
       infinite: false,

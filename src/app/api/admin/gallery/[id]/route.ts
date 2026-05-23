@@ -3,14 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { unlink } from "fs/promises";
 import { join } from "path";
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
   try {
-    // Await params karena bertipe Promise di Next.js versi terbaru
-    const { id } = await params;
+    const { id } = await context.params;
 
+    // Cari data gallery
     const galleryItem = await prisma.gallery.findUnique({
       where: { id },
     });
@@ -22,20 +26,19 @@ export async function DELETE(
       );
     }
 
-    // Hapus file dari filesystem
+    // Hapus file dari filesystem (jika ada)
     try {
-      // Menghindari duplikasi folder "public"
       const imagePath = galleryItem.imageUrl.startsWith("/")
         ? galleryItem.imageUrl.slice(1)
         : galleryItem.imageUrl;
 
       const filepath = join(process.cwd(), "public", imagePath);
       await unlink(filepath);
-    } catch (err) {
+    } catch {
       console.log("File not found, skipping deletion");
     }
 
-    // Hapus data dari database
+    // Hapus dari database
     await prisma.gallery.delete({
       where: { id },
     });
