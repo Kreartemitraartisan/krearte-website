@@ -42,13 +42,12 @@ export default function EditProductPage() {
   const [uploading, setUploading] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   
-  // ✅ Tambah is25DEligible di formData
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
     category: "wallcovering",
     collectionType: "wallcovering",
-    is25DEligible: false, // ✅ NEW
+    is25DEligible: false,
     price: 0,
     description: "",
     stock: 0,
@@ -68,7 +67,16 @@ export default function EditProductPage() {
            m.pricePerM2 > 0;
   };
 
-  const isServiceOrAddon = (m: Material) => !isPhysicalMaterial(m);
+  // ✅ NEW: Filter out sample items (karena sudah ada tombol Order Sample di product page)
+  const isSampleItem = (m: Material) => {
+    const name = m.name?.toLowerCase() || '';
+    const cat = m.category?.toLowerCase() || '';
+    return name.includes('sample') || cat.includes('sample');
+  };
+
+  const isServiceOrAddon = (m: Material) => {
+    return !isPhysicalMaterial(m) && !isSampleItem(m); // ✅ Exclude samples
+  };
 
   // ✅ Fetch Product & Materials
   useEffect(() => {
@@ -88,7 +96,7 @@ export default function EditProductPage() {
             slug: productData.product.slug || "",
             category: productData.product.category || "wallcovering",
             collectionType: productData.product.collectionType || "wallcovering",
-            is25DEligible: productData.product.is25DEligible || false, // ✅ Load is25DEligible
+            is25DEligible: productData.product.is25DEligible || false,
             price: productData.product.price || 0,
             description: productData.product.description || "",
             stock: productData.product.stock || 0,
@@ -202,7 +210,6 @@ export default function EditProductPage() {
     });
   };
 
-  // ✅ Updated: Handle Input Change dengan sync collectionType & category
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -216,7 +223,6 @@ export default function EditProductPage() {
     } else {
       setFormData(prev => {
         const updated = { ...prev, [name]: value };
-        // ✅ Auto-sync: jika category berubah, update collectionType juga
         if (name === "category") {
           updated.collectionType = value === "designer" ? "designer" : "wallcovering";
         }
@@ -225,13 +231,12 @@ export default function EditProductPage() {
     }
   };
 
-  // ✅ Helper: Set collection type (dipanggil dari toggle buttons)
   const handleCollectionTypeChange = (newType: "wallcovering" | "designer") => {
     setFormData(prev => ({
       ...prev,
       collectionType: newType,
-      category: newType, // ✅ Sync category dengan collectionType
-      is25DEligible: newType === "wallcovering" ? false : prev.is25DEligible, // ✅ Reset 2.5D jika ke wallcovering
+      category: newType,
+      is25DEligible: newType === "wallcovering" ? false : prev.is25DEligible,
     }));
   };
 
@@ -264,7 +269,7 @@ export default function EditProductPage() {
 
   // ✅ Filter materials untuk display
   const physicalMaterials = materials.filter(isPhysicalMaterial);
-  const services = materials.filter(isServiceOrAddon);
+  const services = materials.filter(isServiceOrAddon); // ✅ Sudah exclude samples
 
   const materialsByCategory = physicalMaterials.reduce((acc, material) => {
     const category = material.category || 'Other';
@@ -330,7 +335,6 @@ export default function EditProductPage() {
               </p>
             </div>
 
-            {/* ✅ Category Select - Tetap ada untuk fallback */}
             <div>
               <label className="block text-sm font-normal mb-2">Category *</label>
               <select
@@ -384,7 +388,7 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        {/* ✅ NEW: Collection Type Section */}
+        {/* Collection Type Section */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Collection Type</h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-4">
@@ -392,7 +396,6 @@ export default function EditProductPage() {
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Wallcovering Option */}
             <button
               type="button"
               onClick={() => handleCollectionTypeChange("wallcovering")}
@@ -410,7 +413,6 @@ export default function EditProductPage() {
               </p>
             </button>
             
-            {/* Designer Collections Option */}
             <button
               type="button"
               onClick={() => handleCollectionTypeChange("designer")}
@@ -432,7 +434,6 @@ export default function EditProductPage() {
             </button>
           </div>
 
-          {/* ✅ 2.5D Print Effect Checkbox - Only for Designer */}
           {formData.collectionType === "designer" && (
             <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
               <div className="flex items-start gap-3">
@@ -456,7 +457,6 @@ export default function EditProductPage() {
             </div>
           )}
           
-          {/* Hint when wallcovering selected */}
           {formData.collectionType === "wallcovering" && (
             <p className="text-xs text-krearte-gray-400 mt-4 italic">
               2.5D Print Effect is only available for Designer Collections.
@@ -655,7 +655,7 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        {/* Services / Add-Ons Section */}
+        {/* ✅ Services / Add-Ons Section - EXCLUDE SAMPLES */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
             Available Services / Add-Ons
