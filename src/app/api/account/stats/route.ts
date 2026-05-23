@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-const { getServerSession } = await import("next-auth");
-const { authOptions } = await import("@/app/api/auth/[...nextauth]/route");
-const { prisma } = await import("@/lib/prisma");
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,6 +7,14 @@ export const fetchCache = "force-no-store";
 
 export async function GET() {
   try {
+    // ✅ Lazy load DI DALAM function
+    const [{ getServerSession }, { authOptions }, { prisma }] =
+      await Promise.all([
+        import("next-auth"),
+        import("@/app/api/auth/[...nextauth]/route"),
+        import("@/lib/prisma"),
+      ]);
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -19,25 +24,19 @@ export async function GET() {
       );
     }
 
-    // ✅ Fetch stats untuk user yang login
     const [totalOrders, totalSpent, wishlistCount] = await Promise.all([
-      // Total orders
       prisma.order.count({
         where: { userId: session.user.id },
       }),
-      
-      // Total spent (sum of order totals)
+
       prisma.order.aggregate({
-        where: { 
+        where: {
           userId: session.user.id,
-          status: { in: ['completed', 'delivered'] } // hanya order yang selesai
+          status: { in: ["completed", "delivered"] },
         },
-        _sum: {
-          total: true,
-        },
+        _sum: { total: true },
       }),
-      
-      // Wishlist items count
+
       prisma.wishlist.count({
         where: { userId: session.user.id },
       }),
@@ -53,7 +52,8 @@ export async function GET() {
     });
 
   } catch (error) {
-    console.error("Error fetching account stats:", error);
+    console.error("STATS API ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch stats" },
       { status: 500 }
