@@ -18,6 +18,7 @@ interface Product {
   slug: string;
   description: string;
   category: string;
+  category_slug?: string;
   price: number;
   images: string[];
   sizes: ProductSize[];
@@ -68,6 +69,10 @@ const FALLBACK_CATEGORIES: Category[] = [
   },
 ];
 
+// ⏰ SHUFFLE INTERVAL (dalam milliseconds)
+// 15 menit = 15 * 60 * 1000 = 900000
+const SHUFFLE_INTERVAL = 15 * 60 * 1000; // 15 menit
+
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
@@ -79,12 +84,15 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  
+  // 🎲 State untuk tracking image index per category
+  const [categoryImageIndex, setCategoryImageIndex] = useState<Record<string, number>>({});
 
   // Fetch products
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await fetch("/api/products?limit=6");
+        const response = await fetch("/api/products?limit=100"); // Ambil lebih banyak untuk variasi
         
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
@@ -147,6 +155,64 @@ export default function HomePage() {
 
     fetchCategories();
   }, []);
+
+  // 🎲 Auto-shuffle images setiap 15 menit
+  useEffect(() => {
+    if (categories.length === 0 || featuredProducts.length === 0) return;
+
+    // Fungsi untuk shuffle image index
+    const shuffleImages = () => {
+      const newIndex: Record<string, number> = {};
+      
+      categories.forEach((category) => {
+        // Cari semua produk di kategori ini
+        const categoryProducts = featuredProducts.filter(
+          p => p.category_slug === category.slug || p.category === category.slug
+        );
+        
+        // Kalau ada produk, pilih random index
+        if (categoryProducts.length > 0) {
+          // Random produk mana yang dipilih
+          const randomProductIndex = Math.floor(Math.random() * categoryProducts.length);
+          
+          // Simpan index produk yang terpilih
+          newIndex[category.id] = randomProductIndex;
+        }
+      });
+      
+      console.log('🎲 Shuffled category images:', newIndex);
+      setCategoryImageIndex(newIndex);
+    };
+
+    // Shuffle pertama kali saat load
+    shuffleImages();
+
+    // Set interval untuk shuffle otomatis
+    const intervalId = setInterval(shuffleImages, SHUFFLE_INTERVAL);
+
+    // Cleanup interval saat component unmount
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [categories, featuredProducts]);
+
+  // Helper untuk mendapatkan gambar kategori yang sedang aktif
+  const getCategoryHeroImage = (category: Category) => {
+    const categoryProducts = featuredProducts.filter(
+      p => p.category_slug === category.slug || p.category === category.slug
+    );
+    
+    if (categoryProducts.length === 0) return null;
+    
+    // Ambil index yang sudah di-shuffle
+    const currentIndex = categoryImageIndex[category.id] || 0;
+    const selectedProduct = categoryProducts[currentIndex];
+    
+    // Cari gambar pertama yang bukan video
+    return selectedProduct?.images?.find(
+      img => !img.endsWith('.mp4') && !img.endsWith('.webm')
+    );
+  };
 
   return (
     <div ref={containerRef} className="relative">
@@ -299,7 +365,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== ✅ CATEGORIES SECTION (FIXED) ==================== */}
+      {/* ==================== ✅ CATEGORIES SECTION (AUTO-SHUFFLE) ==================== */}
       <section className="py-40 md:py-60 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
           
@@ -332,54 +398,85 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
-              {categories.map((category, index) => (
-                <motion.div
-                  key={category.id}
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ 
-                    duration: 0.8, 
-                    delay: index * 0.1,
-                    ease: [0.16, 1, 0.3, 1] 
-                  }}
-                >
-                  <Link 
-                    href={`/collection/wallcovering/${category.slug}`}
-                    className="group block"
+              {categories.map((category, index) => {
+                const heroImage = getCategoryHeroImage(category);
+
+                return (
+                  <motion.div
+                    key={category.id}
+                    initial={{ opacity: 0, y: 40 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ 
+                      duration: 0.8, 
+                      delay: index * 0.1,
+                      ease: [0.16, 1, 0.3, 1] 
+                    }}
                   >
-                    {/* Category Image */}
-                    <div className="aspect-[4/5] bg-krearte-gray-100 rounded-lg overflow-hidden mb-4">
-                      {category.image_url ? (
+                    <Link 
+                      href={`/collection/wallcovering/${category.slug}`}
+                      className="group relative block aspect-[4/5] rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-500"
+                    >
+                      {/* Background Image */}
+                      {heroImage ? (
                         <img
-                          src={category.image_url}
+                          key={heroImage} // Key untuk trigger animasi saat gambar berubah
+                          src={heroImage}
                           alt={category.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           loading="lazy"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-krearte-gray-100 to-krearte-gray-200">
+                        // Fallback kalau belum ada gambar produk
+                        <div className="absolute inset-0 bg-krearte-gray-100 flex items-center justify-center">
                           <span className="text-8xl font-light text-krearte-gray-400">
                             {category.name.charAt(0)}
                           </span>
                         </div>
                       )}
-                    </div>
 
-                    {/* Category Name */}
-                    <h3 className="font-sans text-xl md:text-2xl font-normal text-krearte-black mb-2 group-hover:underline decoration-krearte-gray-300 underline-offset-4 transition-all">
-                      {category.name}
-                    </h3>
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-90 group-hover:opacity-100 transition-opacity duration-500" />
 
-                    {/* Category Description */}
-                    {category.description && (
-                      <p className="text-krearte-gray-600 font-light text-sm line-clamp-2">
-                        {category.description}
-                      </p>
-                    )}
-                  </Link>
-                </motion.div>
-              ))}
+                      {/* Content (Text) */}
+                      <div className="relative z-10 h-full flex flex-col justify-end p-6 md:p-8">
+                        <h3 className="font-sans text-2xl md:text-3xl font-normal text-white mb-2 drop-shadow-md group-hover:underline decoration-white/60 underline-offset-4 transition-all">
+                          {category.name}
+                        </h3>
+                        {category.description && (
+                          <p className="text-white/85 font-light text-sm md:text-base line-clamp-2 drop-shadow-sm leading-relaxed">
+                            {category.description}
+                          </p>
+                        )}
+                        
+                        {/* CTA Arrow */}
+                        <div className="mt-4 flex items-center text-white/90 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-500">
+                          Explore Collection
+                          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Indicator Dot (Optional - untuk show ada shuffle) */}
+                      {featuredProducts.filter(p => p.category_slug === category.slug || p.category === category.slug).length > 1 && (
+                        <div className="absolute top-4 right-4 flex gap-1.5">
+                          {Array.from({ length: Math.min(3, featuredProducts.filter(p => p.category_slug === category.slug || p.category === category.slug).length) }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
+                                i === (categoryImageIndex[category.id] % 3)
+                                  ? 'bg-white scale-125'
+                                  : 'bg-white/40'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </Link>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
 
