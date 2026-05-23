@@ -2,21 +2,25 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  reactStrictMode: false, // ✅ Mencegah infinite loop di production
+  reactStrictMode: false,
   
   images: {
     remotePatterns: [
       {
-        protocol: 'http',
-        hostname: '72.62.120.245', // ✅ Izinkan gambar dari VPS kamu
-        port: '',
+        protocol: 'https',
+        hostname: 'assets.krearte.id',
         pathname: '/images/**',
       },
       {
-        protocol: 'http',
-        hostname: '72.62.120.245',
-        port: '',
+        protocol: 'https',
+        hostname: 'assets.krearte.id',
         pathname: '/videos/**',
+      },
+      // ✅ Tetap izinkan localhost untuk development
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        pathname: '/**',
       },
     ],
   },

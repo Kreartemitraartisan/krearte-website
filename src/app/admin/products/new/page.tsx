@@ -107,6 +107,7 @@ export default function NewProductPage() {
     }
   };
 
+  // ✅ UPDATED: Upload ke VPS via API Route (bukan Supabase)
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -132,40 +133,34 @@ export default function NewProductPage() {
           throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        const ext = file.name.split(".").pop();
-        const safeName = file.name.split(".")[0].replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(2, 8);
-        const folder = isVideo ? "videos" : "products";
-        const fileName = `${folder}/${timestamp}-${random}-${safeName}.${ext}`;
-
+        // Upload progress simulation
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => Math.min(prev + 10, 90));
         }, 200);
 
-        const { error: uploadError } = await supabase.storage
-          .from("uploads")
-          .upload(fileName, file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: file.type,
-          });
+        // ✅ Upload ke API route yang forward ke VPS
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', type);
+
+        const response = await fetch('/api/upload-to-vps', {
+          method: 'POST',
+          body: formData,
+        });
 
         clearInterval(progressInterval);
         setUploadProgress(100);
 
-        if (uploadError) {
-          console.error("Supabase upload error:", uploadError);
-          throw new Error(uploadError.message || "Failed to upload to Supabase");
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
         }
 
-        const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
+        const result = await response.json();
         
-        if (!data?.publicUrl) {
-          throw new Error("Failed to get public URL");
-        }
-
-        setImages(prev => [...prev, data.publicUrl]);
+        // ✅ URL sudah format https://assets.krearte.id/...
+        setImages(prev => [...prev, result.url]);
+        
         setTimeout(() => setUploadProgress(0), 500);
       }
     } catch (err: any) {
