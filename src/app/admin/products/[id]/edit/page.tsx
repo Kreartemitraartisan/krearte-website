@@ -58,7 +58,7 @@ export default function EditProductPage() {
     name: "",
     slug: "",
     category: "wallcovering",
-    category_slug: "", // ✅ NEW: category slug for new system
+    category_slug: "",
     collectionType: "wallcovering",
     is25DEligible: false,
     price: 0,
@@ -97,7 +97,7 @@ export default function EditProductPage() {
         const [productRes, materialsRes, categoriesRes] = await Promise.all([
           fetch(`/api/admin/products/${productId}`),
           fetch("/api/materials"),
-          fetch("/api/categories?collectionType=wallcovering"), // ✅ Fetch categories
+          fetch("/api/categories?collectionType=wallcovering"),
         ]);
 
         const productData = await productRes.json();
@@ -109,7 +109,7 @@ export default function EditProductPage() {
             name: productData.product.name || "",
             slug: productData.product.slug || "",
             category: productData.product.category || "wallcovering",
-            category_slug: productData.product.category_slug || "", // ✅ Load existing category_slug
+            category_slug: productData.product.category_slug || "",
             collectionType: productData.product.collectionType || "wallcovering",
             is25DEligible: productData.product.is25DEligible || false,
             price: productData.product.price || 0,
@@ -123,7 +123,6 @@ export default function EditProductPage() {
 
         setMaterials(materialsData.materials || []);
         
-        // ✅ Set categories
         if (categoriesData.success) {
           setCategories(categoriesData.categories || []);
         }
@@ -143,7 +142,7 @@ export default function EditProductPage() {
     }
   }, [productId]);
 
-  // ✅ Handle Media Upload
+  // ✅ FIXED: Handle Media Upload - Upload ke VPS
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -153,32 +152,82 @@ export default function EditProductPage() {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const formDataUpload = new FormData();
-        formDataUpload.append("file", file);
-        formDataUpload.append("type", type);
+        
+        console.log(`📁 Uploading ${type}:`, {
+          name: file.name,
+          type: file.type,
+          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+        });
 
-        const response = await fetch("/api/admin/upload", {
-          method: "POST",
+        // ✅ Validasi ukuran file
+        const isVideo = type === "video";
+        const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+        
+        if (file.size > maxSize) {
+          throw new Error(`File terlalu besar. Maksimal ${isVideo ? "50MB" : "10MB"}`);
+        }
+
+        // ✅ Validasi MIME type
+        if (isVideo) {
+          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
+          if (!allowedVideoTypes.includes(file.type)) {
+            throw new Error(`Format video tidak didukung. Gunakan: MP4, WebM, MOV, atau M4V`);
+          }
+        } else {
+          const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allowedImageTypes.includes(file.type)) {
+            throw new Error(`Format gambar tidak didukung. Gunakan: JPG, PNG, atau WebP`);
+          }
+        }
+
+        // ✅ Build FormData
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        formDataUpload.append('type', type);
+
+        console.log('📤 Sending to VPS upload server...');
+
+        // ✅ Upload ke VPS (BUKAN ke /api/admin/upload)
+        const response = await fetch('https://assets.krearte.id/api/upload', {
+          method: 'POST',
+          headers: {
+            // ✅ API Key untuk autentikasi
+            'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDtFj0yXcUO5QkJ'
+          },
           body: formDataUpload,
         });
 
-        const result = await response.json();
-        
-        if (result.success) {
-          setFormData(prev => ({
-            ...prev,
-            images: [...prev.images, result.url]
-          }));
-        } else {
-          alert(result.error || "Upload failed!");
+        console.log('📥 Response status:', response.status, response.statusText);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Upload failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+          throw new Error(`Upload failed: ${response.status} - ${errorText || response.statusText}`);
         }
+
+        const result = await response.json();
+        console.log('✅ Upload success:', result);
+        
+        if (!result.success || !result.url) {
+          throw new Error('Invalid response from server');
+        }
+
+        // ✅ Tambahkan URL ke formData
+        setFormData(prev => ({
+          ...prev,
+          images: [...prev.images, result.url]
+        }));
       }
-    } catch (error) {
-      console.error("❌ Error uploading media:", error);
-      alert("Upload failed!");
+    } catch (error: any) {
+      console.error('❌ Upload error:', error);
+      alert(`❌ ${error.message || "Upload failed!"}`);
     } finally {
       setUploading(false);
-      e.target.value = "";
+      e.target.value = ""; // Reset input
     }
   };
 
@@ -269,7 +318,7 @@ export default function EditProductPage() {
       const response = await fetch(`/api/admin/products/${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData), // ✅ formData sudah include category_slug
+        body: JSON.stringify(formData),
       });
 
       const result = await response.json();
@@ -526,7 +575,7 @@ export default function EditProductPage() {
             <div className="border-2 border-dashed border-krearte-gray-200 rounded-lg p-6 text-center">
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
                 onChange={(e) => handleMediaUpload(e, "image")}
                 disabled={uploading}
@@ -535,7 +584,11 @@ export default function EditProductPage() {
               />
               <label
                 htmlFor="image-upload-edit"
-                className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-krearte-black text-krearte-white rounded-lg hover:bg-krearte-charcoal transition-colors disabled:opacity-50"
+                className={`cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                  uploading 
+                    ? "bg-krearte-gray-400 cursor-not-allowed" 
+                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
+                }`}
               >
                 <Upload className="w-4 h-4" />
                 {uploading ? "Uploading..." : "Upload Images"}
@@ -552,7 +605,7 @@ export default function EditProductPage() {
             <div className="border-2 border-dashed border-krearte-gray-200 rounded-lg p-6 text-center">
               <input
                 type="file"
-                accept="video/mp4,video/webm"
+                accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
                 multiple
                 onChange={(e) => handleMediaUpload(e, "video")}
                 disabled={uploading}
@@ -561,19 +614,23 @@ export default function EditProductPage() {
               />
               <label
                 htmlFor="video-upload-edit"
-                className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-krearte-black text-krearte-white rounded-lg hover:bg-krearte-charcoal transition-colors disabled:opacity-50"
+                className={`cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                  uploading 
+                    ? "bg-krearte-gray-400 cursor-not-allowed" 
+                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
+                }`}
               >
                 <Upload className="w-4 h-4" />
                 {uploading ? "Uploading..." : "Upload Videos"}
               </label>
-              <p className="text-xs text-krearte-gray-500 mt-2">MP4, WebM (max 50MB)</p>
+              <p className="text-xs text-krearte-gray-500 mt-2">MP4, WebM, MOV, M4V (max 50MB)</p>
             </div>
           </div>
 
           {formData.images.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               {formData.images.map((media, index) => {
-                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm');
+                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov') || media.endsWith('.m4v');
                 
                 return (
                   <div key={index} className="relative aspect-square bg-krearte-gray-100 rounded-lg overflow-hidden group">
