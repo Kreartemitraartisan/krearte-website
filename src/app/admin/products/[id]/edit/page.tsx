@@ -94,6 +94,8 @@ export default function EditProductPage() {
   useEffect(() => {
     async function fetchData() {
       try {
+        console.log('🔍 Fetching product data for ID:', productId);
+        
         const [productRes, materialsRes, categoriesRes] = await Promise.all([
           fetch(`/api/admin/products/${productId}`),
           fetch("/api/materials"),
@@ -104,27 +106,39 @@ export default function EditProductPage() {
         const materialsData = await materialsRes.json();
         const categoriesData = await categoriesRes.json();
 
-        if (productData.success) {
-          setFormData({
-            name: productData.product.name || "",
-            slug: productData.product.slug || "",
-            category: productData.product.category || "wallcovering",
-            category_slug: productData.product.category_slug || "",
-            collectionType: productData.product.collectionType || "wallcovering",
-            is25DEligible: productData.product.is25DEligible || false,
-            price: productData.product.price || 0,
-            description: productData.product.description || "",
-            stock: productData.product.stock || 0,
-            images: productData.product.images || [],
-            availableMaterialIds: productData.product.availableMaterialIds || [],
-            recommendedMaterialIds: productData.product.recommendedMaterialIds || [],
-          });
+        console.log('🔎 Product API response:', productData);
+
+        // ✅ FIX: Pastikan data product ada dan valid
+        const product = productData?.product || productData?.data || productData;
+        
+        if (!product || !product.id) {
+          console.error('❌ Product data not found');
+          alert("Failed to load product data.");
+          return;
         }
 
-        setMaterials(materialsData.materials || []);
+        // ✅ Set formData dengan data yang benar
+        setFormData({
+          name: product.name || "",
+          slug: product.slug || "",
+          category: product.category || "wallcovering",
+          category_slug: product.category_slug || "",
+          collectionType: product.collectionType || "wallcovering",
+          is25DEligible: product.is25DEligible || false,
+          price: typeof product.price === 'number' ? product.price : 0,
+          description: product.description || "",
+          stock: typeof product.stock === 'number' ? product.stock : 0,
+          images: Array.isArray(product.images) ? product.images : [],
+          availableMaterialIds: Array.isArray(product.availableMaterialIds) ? product.availableMaterialIds : [],
+          recommendedMaterialIds: Array.isArray(product.recommendedMaterialIds) ? product.recommendedMaterialIds : [],
+        });
+
+        console.log('✅ Product loaded into form');
+
+        setMaterials(materialsData?.materials || materialsData?.data || []);
         
-        if (categoriesData.success) {
-          setCategories(categoriesData.categories || []);
+        if (categoriesData?.success || categoriesData?.categories) {
+          setCategories(categoriesData.categories || categoriesData.data || []);
         }
         
       } catch (error) {
@@ -153,11 +167,7 @@ export default function EditProductPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        console.log(`📁 Uploading ${type}:`, {
-          name: file.name,
-          type: file.type,
-          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
-        });
+        console.log(`📁 Uploading ${type}:`, file.name);
 
         // ✅ Validasi ukuran file
         const isVideo = type === "video";
@@ -197,16 +207,11 @@ export default function EditProductPage() {
           body: formDataUpload,
         });
 
-        console.log('📥 Response status:', response.status, response.statusText);
+        console.log('📥 Response status:', response.status);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ Upload failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText
-          });
-          throw new Error(`Upload failed: ${response.status} - ${errorText || response.statusText}`);
+          throw new Error(`Upload failed: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
@@ -444,7 +449,7 @@ export default function EditProductPage() {
                 )}
               </select>
               <p className="text-xs text-krearte-gray-500 mt-1">
-                Used for filtering in collection pages (e.g., /collection/wallcovering/flower-leaves)
+                Used for filtering in collection pages
               </p>
             </div>
 
@@ -490,9 +495,6 @@ export default function EditProductPage() {
         {/* Collection Type Section */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Collection Type</h2>
-          <p className="text-sm font-light text-krearte-gray-600 mb-4">
-            Pilih kategori koleksi untuk design ini. Designer Collections menampilkan material premium & metallic.
-          </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
@@ -548,18 +550,9 @@ export default function EditProductPage() {
                   <label htmlFor="is25DEligible" className="text-sm font-medium text-krearte-black cursor-pointer">
                     2.5D Print Effect Eligible
                   </label>
-                  <p className="text-xs text-krearte-gray-500 mt-1">
-                    Enable this to allow 2.5D textured print effect for this design. Only available for Designer Collections.
-                  </p>
                 </div>
               </div>
             </div>
-          )}
-          
-          {formData.collectionType === "wallcovering" && (
-            <p className="text-xs text-krearte-gray-400 mt-4 italic">
-              2.5D Print Effect is only available for Designer Collections.
-            </p>
           )}
         </div>
 
@@ -676,11 +669,8 @@ export default function EditProductPage() {
             {physicalMaterials.length === 0 ? (
               <div className="p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
                 <p className="text-sm text-krearte-gray-600">
-                  No physical materials available. Please add materials first.
+                  No physical materials available.
                 </p>
-                <Link href="/admin/materials" className="inline-flex items-center gap-2 mt-2 text-sm text-krearte-black font-medium hover:text-krearte-gray-600">
-                  Go to Materials Management →
-                </Link>
               </div>
             ) : (
               <div className="space-y-6">
@@ -724,13 +714,10 @@ export default function EditProductPage() {
             <h3 className="text-sm font-medium text-krearte-black mb-3">
               Recommended Materials (Optional)
             </h3>
-            <p className="text-xs text-krearte-gray-500 mb-3">
-              Select materials to recommend (must be in available materials first)
-            </p>
             
             {formData.availableMaterialIds.length === 0 ? (
               <p className="text-sm text-krearte-gray-500 italic">
-                Select available materials first to enable recommendations
+                Select available materials first
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -770,9 +757,6 @@ export default function EditProductPage() {
               {services.length}
             </span>
           </h2>
-          <p className="text-sm font-light text-krearte-gray-600 mb-6">
-            Pilih jasa/add-on yang tersedia untuk product ini (opsional)
-          </p>
           
           {loadingMaterials ? (
             <div className="text-center py-8">
