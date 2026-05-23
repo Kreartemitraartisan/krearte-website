@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
 
-const prisma = new PrismaClient();
-
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    // ✅ Lazy import semua dependency
+    const { prisma } = await import("@/lib/prisma");
+    const bcrypt = await import("bcryptjs");
+
     const body = await request.json();
     const { name, email, currentPassword, newPassword } = body;
 
@@ -35,7 +36,6 @@ export async function PUT(request: Request) {
         );
       }
 
-      // ✅ FIX: handle nullable password
       if (!admin.password) {
         return NextResponse.json(
           { success: false, error: "Admin password not set" },
@@ -62,7 +62,6 @@ export async function PUT(request: Request) {
         );
       }
 
-      // 🔒 Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
       await prisma.user.update({
@@ -73,10 +72,10 @@ export async function PUT(request: Request) {
           password: hashedPassword,
         },
       });
-    } 
-    
+    }
+
     // =========================
-    // 👤 PROFILE UPDATE ONLY
+    // 👤 PROFILE UPDATE
     // =========================
     else {
       await prisma.user.update({
@@ -94,7 +93,8 @@ export async function PUT(request: Request) {
     });
 
   } catch (error) {
-    console.error("❌ Error updating profile:", error);
+    console.error("UPDATE ADMIN PROFILE ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to update profile" },
       { status: 500 }
