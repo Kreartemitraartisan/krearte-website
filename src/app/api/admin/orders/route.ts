@@ -1,5 +1,10 @@
+// src/app/api/admin/orders/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
+// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function PUT(request: NextRequest) {
   try {
