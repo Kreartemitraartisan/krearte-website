@@ -114,6 +114,8 @@ export async function PUT(
       stock: Number(body.stock),
       description: body.description || null,
       collectionType: body.collectionType || "wallcovering",
+      // ✅ TAMBAHKAN INI: category_slug
+      category_slug: body.category_slug || null,
     };
 
     if (Array.isArray(body.images)) {
