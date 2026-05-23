@@ -3,14 +3,30 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingBag, Menu, X, User, LogOut, Heart, Settings } from "lucide-react";
+import { ShoppingBag, Menu, X, User, LogOut, Heart, Settings, ChevronDown } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { useCart } from "@/lib/cart/context";
 import { useWishlist } from "@/lib/wishlist/context";
 
+// Hardcoded categories untuk Wallcovering dropdown
+const WALLCOVERING_CATEGORIES = [
+  { name: "Flower & Leaves", slug: "flower-leaves" },
+  { name: "Animals", slug: "animals" },
+  { name: "Chinoiserie", slug: "chinoiserie" },
+  { name: "Lotus", slug: "lotus" },
+  { name: "Jolly Wolly", slug: "jolly-wolly" },
+  { name: "Marble", slug: "marble" },
+  { name: "Abstract", slug: "abstract" },
+  { name: "Geometric", slug: "geometric" },
+  { name: "Scenery", slug: "scenery" },
+  { name: "Toile de Jouy", slug: "toile-de-jouy" },
+  { name: "Tropical", slug: "tropical" },
+  { name: "Zen", slug: "zen" },
+  { name: "Du Pavillon", slug: "du-pavillon" },
+];
+
 const navItems = [
-  { label: "Wallcovering", href: "/collection/wallcovering" },
-  { label: "Designer Collections", href: "/collections/designers" },
+  { label: "Designer Collections", href: "/collection/designer" },
   { label: "Materials", href: "/materials" },
   { label: "Gallery", href: "/gallery" },
   { label: "Custom with Us", href: "/custom" },
@@ -19,11 +35,16 @@ const navItems = [
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [wallcoveringDropdownOpen, setWallcoveringDropdownOpen] = useState(false);
+  
   const { itemCount, openCart } = useCart();
   const { itemCount: wishlistCount } = useWishlist();
   const { data: session, status } = useSession();
-  const userMenuRef = useRef<HTMLDivElement>(null);
   
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const wallcoveringDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -32,16 +53,22 @@ export function Header() {
       ) {
         setUserMenuOpen(false);
       }
+      if (
+        wallcoveringDropdownRef.current && 
+        !wallcoveringDropdownRef.current.contains(event.target as Node)
+      ) {
+        setWallcoveringDropdownOpen(false);
+      }
     };
 
-    if (userMenuOpen) {
+    if (userMenuOpen || wallcoveringDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [userMenuOpen]);
+  }, [userMenuOpen, wallcoveringDropdownOpen]);
 
   // ✅ Check admin
   const isAdmin = session?.user?.role === "admin";
@@ -104,6 +131,52 @@ export function Header() {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
+              
+              {/* Wallcovering Dropdown */}
+              <div 
+                className="relative"
+                ref={wallcoveringDropdownRef}
+                onMouseEnter={() => setWallcoveringDropdownOpen(true)}
+                onMouseLeave={() => setWallcoveringDropdownOpen(false)}
+              >
+                <button
+                  className="flex items-center gap-1 text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors relative group py-2"
+                >
+                  Wallcovering
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${wallcoveringDropdownOpen ? 'rotate-180' : ''}`} />
+                  <span className="absolute -bottom-1 left-0 w-0 h-px bg-krearte-black transition-all duration-300 group-hover:w-full" />
+                </button>
+
+                {/* Dropdown Popup */}
+                <AnimatePresence>
+                  {wallcoveringDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute top-full left-0 mt-2 w-80 bg-krearte-white border border-krearte-gray-200 rounded-lg shadow-elevated p-4 z-50"
+                    >
+                      <div className="grid grid-cols-2 gap-2">
+                        {WALLCOVERING_CATEGORIES.map((cat) => (
+                          <Link
+                            key={cat.slug}
+                            href={`/collection/wallcovering/${cat.slug}`}
+                            className="group p-2 hover:bg-krearte-gray-50 rounded transition-colors"
+                            onClick={() => setWallcoveringDropdownOpen(false)}
+                          >
+                            <p className="text-sm font-light text-krearte-black group-hover:text-krearte-gray-600">
+                              {cat.name}
+                            </p>
+                          </Link>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Other Nav Items */}
               {navItems.map((item) => (
                 <Link
                   key={item.href}
@@ -120,7 +193,6 @@ export function Header() {
             <div className="flex items-center space-x-4">
               {/* User Menu (Desktop) */}
               {session?.user ? (
-                // ✅ Wrap dropdown in ref container
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -264,12 +336,21 @@ export function Header() {
 
               {/* Mobile Nav Items */}
               <div className="flex flex-col space-y-6 flex-1">
+                
+                {/* Wallcovering Accordion (Mobile) */}
+                <MobileAccordion 
+                  title="Wallcovering Collection"
+                  categories={WALLCOVERING_CATEGORIES}
+                  basePath="/collection/wallcovering"
+                  onClose={() => setMobileMenuOpen(false)}
+                />
+                
                 {navItems.map((item, index) => (
                   <motion.div
                     key={item.href}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ delay: index * 0.1 + 0.2 }}
                   >
                     <Link
                       href={item.href}
@@ -349,5 +430,55 @@ export function Header() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+// ✅ Helper Component: Mobile Accordion for Categories
+function MobileAccordion({ 
+  title, 
+  categories, 
+  basePath, 
+  onClose 
+}: { 
+  title: string;
+  categories: { name: string; slug: string }[];
+  basePath: string;
+  onClose: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full text-2xl font-light text-krearte-black py-2"
+      >
+        {title}
+        <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden pl-4 space-y-1"
+          >
+            {categories.map((cat) => (
+              <Link
+                key={cat.slug}
+                href={`${basePath}/${cat.slug}`}
+                onClick={onClose}
+                className="block text-lg font-light text-krearte-gray-600 hover:text-krearte-black py-1 transition-colors"
+              >
+                {cat.name}
+              </Link>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
