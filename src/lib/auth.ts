@@ -1,27 +1,22 @@
-import { NextAuthOptions } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
+import { NextAuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
     CredentialsProvider({
-      name: "credentials",
+      name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials): Promise<any> {
-        // ✅ Tambahkan return type eksplisit: Promise<any> atau Promise<User | null>
-        
+      async authorize(credentials): Promise<User | null> {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Invalid credentials");
+          return null;
         }
 
         const user = await prisma.user.findUnique({
@@ -29,35 +24,31 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user || !user.password) {
-          return null; // ✅ Return null, bukan throw error
+          return null;
         }
 
-        // ⚠️ Gunakan bcrypt di production!
         const isCorrectPassword = credentials.password === user.password;
 
         if (!isCorrectPassword) {
-          return null; // ✅ Return null, bukan throw error
+          return null;
         }
 
-        // ✅ Return object yang sesuai dengan User interface
+        // ✅ Hanya return field yang ada di Prisma schema
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
-          // Tambahkan field lain jika perlu
-        };
+          name: user.name ?? undefined,
+          // Tambahkan field lain HANYA jika ada di schema
+        } as User;
       },
     }),
   ],
-
   session: {
     strategy: "jwt",
   },
-
   pages: {
     signIn: "/login",
   },
-
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -72,6 +63,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-
   secret: process.env.NEXTAUTH_SECRET,
 };
