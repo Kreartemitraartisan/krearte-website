@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Plus, Edit, Trash2, Loader2, Search } from "lucide-react";
+import { Package, Plus, Edit, Trash2, Loader2, Search, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 interface Product {
@@ -32,6 +32,8 @@ export default function AdminProductsPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch products and materials
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function AdminProductsPage() {
       console.log(`✅ Loaded ${productsData.products?.length || 0} products`);
     } catch (error) {
       console.error("❌ Error fetching data:", error);
-      alert("Failed to load data");
+      setError("Failed to load data. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -93,8 +95,17 @@ export default function AdminProductsPage() {
     };
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
+  // ✅ IMPROVED: Delete function with better error handling & loading state
+  const handleDelete = async (id: string, productName: string) => {
+    // Confirm dengan nama produk
+    const confirmed = confirm(
+      `⚠️ Are you sure you want to delete "${productName}"?\n\nThis will also remove all associated images and material assignments.`
+    );
+    
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    setError(null);
 
     try {
       const response = await fetch(`/api/admin/products/${id}`, {
@@ -103,15 +114,37 @@ export default function AdminProductsPage() {
 
       const result = await response.json();
 
-      if (result.success) {
-        alert("✅ Product deleted successfully!");
-        fetchData(); // Refresh list
+      if (response.ok && result.success) {
+        // ✅ Success - Remove from local state immediately (lebih cepat daripada re-fetch)
+        setProducts(prev => prev.filter(p => p.id !== id));
+        alert(`✅ "${productName}" deleted successfully!`);
       } else {
-        alert("❌ Delete failed: " + result.error);
+        // ❌ Handle specific error messages from backend
+        const errorMsg = result.error || result.message || "Unknown error";
+        
+        // Detect foreign key constraint errors
+        if (errorMsg.includes('foreign key') || errorMsg.includes('constraint')) {
+          alert(
+            `❌ Cannot delete "${productName}"\n\n` +
+            `This product is still referenced by other data (e.g., orders, quotes).\n\n` +
+            `Please remove those references first, or contact support.`
+          );
+        } else {
+          alert(`❌ Delete failed: ${errorMsg}`);
+        }
+        console.error("Delete API error:", result);
       }
-    } catch (error) {
-      console.error("Delete error:", error);
-      alert("❌ Delete failed");
+    } catch (error: any) {
+      console.error("Delete network error:", error);
+      
+      // Handle network errors
+      if (error.message?.includes('Failed to fetch')) {
+        alert("❌ Connection error. Please check your internet and try again.");
+      } else {
+        alert("❌ Delete failed: " + (error.message || "Unknown error"));
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -128,6 +161,7 @@ export default function AdminProductsPage() {
     product.slug.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -153,6 +187,20 @@ export default function AdminProductsPage() {
           Add Product
         </Link>
       </div>
+
+      {/* Global Error Message */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span>{error}</span>
+          <button 
+            onClick={() => setError(null)}
+            className="ml-auto text-red-500 hover:text-red-700"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -196,6 +244,7 @@ export default function AdminProductsPage() {
           <tbody className="divide-y divide-krearte-gray-100">
             {filteredProducts.map((product) => {
               const priceRange = calculatePriceRange(product.availableMaterialIds);
+              const isDeleting = deletingId === product.id;
               
               return (
                 <tr key={product.id} className="hover:bg-krearte-gray-50 transition-colors">
@@ -298,17 +347,27 @@ export default function AdminProductsPage() {
                     <div className="flex items-center justify-end gap-2">
                       <Link
                         href={`/admin/products/${product.id}/edit`}
-                        className="p-2 hover:bg-krearte-gray-100 rounded transition-colors"
+                        className="p-2 hover:bg-krearte-gray-100 rounded transition-colors disabled:opacity-50"
                         title="Edit"
+                        onClick={(e) => isDeleting && e.preventDefault()}
                       >
                         <Edit className="w-4 h-4 text-krearte-gray-600" />
                       </Link>
                       <button
-                        onClick={() => handleDelete(product.id)}
-                        className="p-2 hover:bg-red-50 rounded transition-colors"
-                        title="Delete"
+                        onClick={() => handleDelete(product.id, product.name)}
+                        disabled={isDeleting}
+                        className={`p-2 rounded transition-colors ${
+                          isDeleting 
+                            ? "bg-red-100 cursor-not-allowed" 
+                            : "hover:bg-red-50"
+                        }`}
+                        title={isDeleting ? "Deleting..." : "Delete"}
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                        {isDeleting ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-red-600" />
+                        ) : (
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        )}
                       </button>
                     </div>
                   </td>

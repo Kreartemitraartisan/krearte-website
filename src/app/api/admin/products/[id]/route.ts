@@ -114,7 +114,6 @@ export async function PUT(
       stock: Number(body.stock),
       description: body.description || null,
       collectionType: body.collectionType || "wallcovering",
-      // ✅ TAMBAHKAN INI: category_slug
       category_slug: body.category_slug || null,
     };
 
@@ -167,7 +166,7 @@ export async function PUT(
 }
 
 // =========================
-// ✅ DELETE - Delete product
+// ✅ DELETE - Delete product (FIXED WITH CASCADE)
 // =========================
 export async function DELETE(
   request: NextRequest,
@@ -202,10 +201,16 @@ export async function DELETE(
     // ✅ FIX: Await params untuk Next.js 15+
     const { id } = await context.params;
 
-    // ✅ Cek apakah product ada dan apakah ada order items
+    // ✅ 1. Cek apakah product ada
     const product = await prisma.product.findUnique({
       where: { id },
-      include: { orderItems: true },
+      include: { 
+        orderItems: true,
+        // Include related tables untuk cascade delete manual jika perlu
+        productImages: true,
+        productMaterials: true,
+        recommendedMaterials: true,
+      },
     });
 
     if (!product) {
@@ -215,18 +220,42 @@ export async function DELETE(
       );
     }
 
-    // ✅ Kalau ada order items, tolak delete
+    // ✅ 2. Kalau ada order items, tolak delete (produk sudah pernah dibeli)
     if (product.orderItems && product.orderItems.length > 0) {
       return NextResponse.json(
         { 
           success: false, 
-          error: "Cannot delete product that has been ordered. Archive it instead." 
+          error: "Cannot delete product that has been ordered. Please archive it instead." 
         },
         { status: 400 }
       );
     }
 
-    // ✅ Hard delete product
+    // ✅ 3. CASCADE DELETE: Hapus data terkait dulu sebelum hapus produk
+    // (Ini mencegah error "Foreign key constraint")
+    
+    // Hapus semua gambar produk
+    if (product.productImages && product.productImages.length > 0) {
+      await prisma.productImage.deleteMany({
+        where: { productId: id }
+      });
+    }
+    
+    // Hapus relasi available materials
+    if (product.productMaterials && product.productMaterials.length > 0) {
+      await prisma.productMaterial.deleteMany({
+        where: { productId: id }
+      });
+    }
+    
+    // Hapus relasi recommended materials
+    if (product.recommendedMaterials && product.recommendedMaterials.length > 0) {
+      await prisma.productRecommendedMaterial.deleteMany({
+        where: { productId: id }
+      });
+    }
+
+    // ✅ 4. BARU hapus produk utamanya
     await prisma.product.delete({
       where: { id },
     });
@@ -239,25 +268,37 @@ export async function DELETE(
   } catch (error: any) {
     console.error("DELETE PRODUCT ERROR:", error);
 
+    // ✅ Handle Prisma error codes
     if (error?.code === "P2003") {
+      // Foreign key constraint - ada data lain yang masih nyambung
       return NextResponse.json(
         { 
           success: false, 
-          error: "Cannot delete: Product is referenced in orders" 
+          error: "Cannot delete: Product is still referenced by other data (orders, quotes, etc.)" 
         },
         { status: 400 }
       );
     }
 
     if (error?.code === "P2025") {
+      // Record not found
       return NextResponse.json(
         { success: false, error: "Product not found" },
         { status: 404 }
       );
     }
 
+    if (error?.code === "P2002") {
+      // Unique constraint failed
+      return NextResponse.json(
+        { success: false, error: "Database constraint error" },
+        { status: 400 }
+      );
+    }
+
+    // Generic error
     return NextResponse.json(
-      { success: false, error: "Failed to delete product" },
+      { success: false, error: "Failed to delete product: " + (error?.message || "Unknown error") },
       { status: 500 }
     );
   }
