@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2, Upload, Sparkles, Film, Image as ImageIcon } from "lucide-react";
 import { slugify, formatCurrency } from "@/lib/utils";
-import { createClient } from "@supabase/supabase-js";
+// ✅ FIX: Import singleton Supabase client (bukan createClient langsung)
+import { supabase } from "@/lib/supabase-client";
 
 interface Material {
   id: string;
@@ -43,12 +44,6 @@ export default function NewProductPage() {
   });
 
   const [images, setImages] = useState<string[]>([]);
-
-  // Initialize Supabase client (client-side, pakai ANON key)
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   // Fetch materials dari API
   useEffect(() => {
@@ -224,31 +219,65 @@ export default function NewProductPage() {
     });
   };
 
+  // ✅ FIX: handleSubmit dengan payload yang valid & debug log
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
+      // ✅ Validasi minimal
+      if (!formData.name.trim()) throw new Error("Product name is required");
+      if (!formData.slug.trim()) throw new Error("Slug is required");
+      
+      // ✅ Pastikan images adalah array URL yang valid (bukan empty string)
+      const imagePayload = images.length > 0 
+        ? images.filter(url => url && url.trim() !== "") 
+        : ["/images/wallpaper-fallback.jpg"]; // Fallback image
+
+      // ✅ Payload yang sesuai dengan Prisma Schema + validasi backend
+      const payload = {
+        name: formData.name.trim(),
+        slug: formData.slug.trim(),
+        description: formData.description?.trim() || "",
+        category: formData.category || "wallcovering",
+        price: 0, // Wallcovering: harga dari material, base price = 0
+        images: imagePayload, // ✅ Array dengan minimal 1 URL valid
+        collectionType: formData.collectionType || "wallcovering",
+        is25DEligible: Boolean(formData.is25DEligible),
+        stock: Number(formData.stock) || 0,
+        availableMaterialIds: formData.availableMaterialIds || [],
+        recommendedMaterialIds: formData.recommendedMaterialIds || [],
+      };
+
+      console.log("📤 Payload:", JSON.stringify(payload, null, 2));
+
       const response = await fetch("/api/admin/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          images,
-          price: 0, // Not used for wallcovering
-          sizes: [], // Not used for wallcovering
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
+      // 🔍 Baca response text dulu sebelum parse JSON
+      const responseText = await response.text();
+      console.log("📥 Raw Response:", responseText);
 
-      if (!result.success) {
-        throw new Error(result.error || "Failed to create product");
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        result = { error: "Invalid JSON from server", raw: responseText };
+      }
+
+      if (!response.ok) {
+        console.error("❌ API Error:", result);
+        throw new Error(result.error || result.message || `HTTP ${response.status}`);
       }
 
       router.push("/admin/products");
+      router.refresh();
     } catch (err: any) {
+      console.error("💥 Error:", err);
       setError(err.message || "Failed to create product");
       alert(`❌ ${err.message}`);
     } finally {
