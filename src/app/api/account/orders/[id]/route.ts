@@ -5,12 +5,15 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> } // ✅ sesuai type Next.js
+  context: any // ✅ hindari type conflict build
 ) {
   try {
+    const { id } = await context.params;
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -19,9 +22,6 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    // ✅ FIX: await params karena Promise
-    const { id } = await context.params;
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -66,10 +66,10 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error("Error fetching order:", error);
+    console.error("ERROR ORDER API:", error);
 
     return NextResponse.json(
-      { success: false, error: "Failed to fetch order" },
+      { success: false, error: "Internal Server Error" },
       { status: 500 }
     );
   }
