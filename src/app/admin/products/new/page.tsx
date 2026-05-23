@@ -108,10 +108,20 @@ export default function NewProductPage() {
   };
 
   // ✅ FIXED: Upload ke VPS dengan debug log & validasi MIME type
+  // ✅ FIXED: Upload dengan validasi ketat & debug log
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
+    
+    console.log("🎯 File input event triggered:", {
+      filesCount: files?.length,
+      firstFileName: files?.[0]?.name,
+      firstFileSize: files?.[0]?.size,
+      inputElement: e.target
+    });
+    
     if (!files || files.length === 0) {
-      console.error("❌ No file selected");
+      console.error("❌ ERROR: No files selected!");
+      alert("❌ Tidak ada file yang dipilih. Silakan coba lagi.");
       return;
     }
 
@@ -122,31 +132,36 @@ export default function NewProductPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Debug log
-        console.log(`📁 Uploading ${type}:`, {
+        // ✅ Validasi file ada
+        if (!file) {
+          console.error(`❌ File index ${i} is null/undefined!`);
+          continue;
+        }
+        
+        console.log(`📁 Processing ${type} ${i + 1}:`, {
           name: file.name,
           type: file.type,
-          size: file.size,
-          lastModified: file.lastModified
+          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+          lastModified: new Date(file.lastModified).toISOString()
         });
 
         const isVideo = type === "video";
         const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
         
         if (file.size > maxSize) {
-          throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
+          throw new Error(`File terlalu besar. Maksimal ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        // ✅ Validasi MIME type untuk video
+        // ✅ Validasi MIME type
         if (isVideo) {
-          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
+          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/ogg'];
           if (!allowedVideoTypes.includes(file.type)) {
-            throw new Error(`Invalid video format. Allowed: ${allowedVideoTypes.join(', ')}`);
+            throw new Error(`Format video tidak didukung. Gunakan: MP4, WebM, MOV, atau M4V`);
           }
         } else {
           const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
           if (!allowedImageTypes.includes(file.type)) {
-            throw new Error(`Invalid image format. Allowed: ${allowedImageTypes.join(', ')}`);
+            throw new Error(`Format gambar tidak didukung. Gunakan: JPG, PNG, GIF, atau WebP`);
           }
         }
 
@@ -154,21 +169,29 @@ export default function NewProductPage() {
           setUploadProgress(prev => Math.min(prev + 10, 90));
         }, 200);
 
-        // ✅ Build FormData dengan field name yang benar
+        // ✅ Build FormData dengan VALIDASI
         const formData = new FormData();
-        formData.append('file', file);        // ✅ Field name: 'file' (harus sama dengan backend)
-        formData.append('type', type);        // ✅ Field name: 'type' (image/video)
+        
+        // Append file - PASTIKAN field name 'file' sama dengan backend
+        formData.append('file', file, file.name);
+        formData.append('type', type);
+        
+        // ✅ Debug: Log FormData contents
+        console.log("📦 FormData contents:");
+        for (let [key, value] of formData.entries()) {
+          if (value instanceof File) {
+            console.log(`  - ${key}: File(${value.name}, ${(value.size / 1024 / 1024).toFixed(2)}MB)`);
+          } else {
+            console.log(`  - ${key}: ${value}`);
+          }
+        }
 
-        console.log("📤 Sending to upload server...", {
-          url: 'https://assets.krearte.id/api/upload',
-          method: 'POST',
-          fields: ['file', 'type']
-        });
+        console.log("📤 Sending POST request to upload server...");
 
         const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
           headers: {
-            // ✅ JANGAN set Content-Type untuk FormData! Browser akan set otomatis dengan boundary
+            // ✅ JANGAN set Content-Type! Browser akan set otomatis dengan boundary
             'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDtFj0yXcUO5QkJ'
           },
           body: formData,
@@ -177,20 +200,29 @@ export default function NewProductPage() {
         clearInterval(progressInterval);
         setUploadProgress(100);
 
-        console.log("📥 Response status:", response.status, response.statusText);
+        console.log("📥 Response received:", {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
+        });
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error("❌ Upload failed:", {
             status: response.status,
             statusText: response.statusText,
-            body: errorText
+            responseBody: errorText
           });
           throw new Error(`Upload failed: ${response.status} - ${errorText || response.statusText}`);
         }
 
         const result = await response.json();
         console.log("✅ Upload success:", result);
+        
+        if (!result.url) {
+          console.error("❌ Server response missing URL:", result);
+          throw new Error("Server response tidak valid");
+        }
         
         setImages(prev => [...prev, result.url]);
         
@@ -199,10 +231,11 @@ export default function NewProductPage() {
     } catch (err: any) {
       console.error("❌ Upload error:", err);
       setError(err.message || "Failed to upload media");
-      alert(`❌ ${err.message || "Upload failed!"}`);
+      alert(`❌ ${err.message || "Upload gagal!"}`);
     } finally {
       setUploading(false);
-      e.target.value = ""; // Reset input agar bisa upload file yang sama lagi
+      // ✅ Reset input setelah upload selesai (bukan sebelum)
+      e.target.value = "";
     }
   };
 
