@@ -38,7 +38,6 @@ interface Category {
   parent_id: string | null;
 }
 
-// ✅ Fallback categories dengan data yang benar
 const FALLBACK_CATEGORIES: Category[] = [
   {
     id: "1",
@@ -69,8 +68,7 @@ const FALLBACK_CATEGORIES: Category[] = [
   },
 ];
 
-// ⏰ SHUFFLE INTERVAL (dalam milliseconds) - 15 menit
-const SHUFFLE_INTERVAL = 15 * 60 * 1000;
+const SHUFFLE_INTERVAL = 15 * 60 * 1000; // 15 menit
 
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,29 +81,19 @@ export default function HomePage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  
-  // 🎲 State untuk tracking image index per category
   const [categoryImageIndex, setCategoryImageIndex] = useState<Record<string, number>>({});
   
-  // Ref untuk menghindari infinite loop pada shuffle effect
-  const shuffleIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const hasInitializedRef = useRef(false);
+  // Ref untuk track apakah shuffle sudah di-init
+  const shuffleInitialized = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch products - ✅ Gunakan limit kecil untuk production
+  // Fetch products
   useEffect(() => {
     async function fetchProducts() {
       try {
         const response = await fetch("/api/products?limit=12");
-        
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new Error("Response is not JSON");
-        }
-        
         const result = await response.json();
-        
         if (result.success) {
           setFeaturedProducts(result.products || []);
         }
@@ -115,7 +103,6 @@ export default function HomePage() {
         setLoadingProducts(false);
       }
     }
-
     fetchProducts();
   }, []);
 
@@ -124,18 +111,8 @@ export default function HomePage() {
     async function fetchCategories() {
       try {
         const response = await fetch('/api/categories?collectionType=wallcovering&parentId=null');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new Error("Response is not JSON");
-        }
-        
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
-        
         if (result.success && result.categories && result.categories.length > 0) {
           setCategories(result.categories.slice(0, 3));
         } else {
@@ -148,20 +125,19 @@ export default function HomePage() {
         setLoadingCategories(false);
       }
     }
-
     fetchCategories();
   }, []);
 
-  // 🎲 Auto-shuffle images setiap 15 menit - ✅ FIX: Hindari infinite loop
+  // ✅ FIX: Shuffle effect yang TIDAK menyebabkan infinite loop
   useEffect(() => {
-    // Hanya jalankan sekali saat data sudah load
-    if (hasInitializedRef.current) return;
+    // Jangan jalankan jika sudah di-init atau data belum ready
+    if (shuffleInitialized.current) return;
     if (categories.length === 0 || featuredProducts.length === 0) return;
     
-    hasInitializedRef.current = true;
+    shuffleInitialized.current = true;
 
-    // Fungsi untuk shuffle image index
-    const shuffleImages = () => {
+    // Fungsi shuffle
+    const performShuffle = () => {
       const newIndex: Record<string, number> = {};
       
       categories.forEach((category) => {
@@ -170,35 +146,29 @@ export default function HomePage() {
         );
         
         if (categoryProducts.length > 0) {
-          const randomProductIndex = Math.floor(Math.random() * categoryProducts.length);
-          newIndex[category.id] = randomProductIndex;
+          newIndex[category.id] = Math.floor(Math.random() * categoryProducts.length);
         }
       });
       
-      // Hanya update state jika ada perubahan (hindari re-render tidak perlu)
-      setCategoryImageIndex(prev => {
-        const hasChanged = Object.keys(newIndex).some(
-          key => newIndex[key] !== prev[key]
-        );
-        return hasChanged ? newIndex : prev;
-      });
+      // Update state
+      setCategoryImageIndex(newIndex);
     };
 
-    // Shuffle pertama kali saat load
-    shuffleImages();
+    // Shuffle pertama kali
+    performShuffle();
 
-    // Set interval untuk shuffle otomatis
-    shuffleIntervalRef.current = setInterval(shuffleImages, SHUFFLE_INTERVAL);
+    // Set interval
+    intervalRef.current = setInterval(performShuffle, SHUFFLE_INTERVAL);
 
-    // Cleanup interval saat component unmount
+    // Cleanup
     return () => {
-      if (shuffleIntervalRef.current) {
-        clearInterval(shuffleIntervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
     };
-  }, [categories, featuredProducts]); // Dependencies tetap, tapi ada guard clause
+  }, []); // ✅ DEPENDENCIES KOSONG - hanya jalan sekali saat mount
 
-  // Helper untuk mendapatkan gambar kategori - ✅ Gunakan useCallback
+  // Helper function
   const getCategoryHeroImage = useCallback((category: Category) => {
     const categoryProducts = featuredProducts.filter(
       p => p.category_slug === category.slug || p.category === category.slug
@@ -214,24 +184,11 @@ export default function HomePage() {
     );
   }, [featuredProducts, categoryImageIndex]);
 
-  // Memoize products by category untuk performance
-  const productsByCategory = useMemo(() => {
-    const map = new Map<string, Product[]>();
-    featuredProducts.forEach(product => {
-      const key = product.category_slug || product.category;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(product);
-    });
-    return map;
-  }, [featuredProducts]);
-
   return (
     <div ref={containerRef} className="relative">
       
       {/* ==================== HERO SECTION ==================== */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        
-        {/* Video Background */}
         <div className="absolute inset-0 w-full h-full">
           <video
             autoPlay
@@ -239,7 +196,6 @@ export default function HomePage() {
             muted
             playsInline
             className="w-full h-full object-cover"
-            // poster dihapus untuk menghindari 404 jika file tidak ada
           >
             <source src="/videos/wallpapers/dreamy-sky.mp4" type="video/mp4" />
             <img
@@ -251,11 +207,8 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-krearte-cream/30" />
         </div>
 
-        {/* Hero Content */}
         <div className="container mx-auto px-6 md:px-12 relative z-10">
           <div className="max-w-7xl mx-auto">
-            
-            {/* Minimal Navigation Hint */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -270,7 +223,6 @@ export default function HomePage() {
               </span>
             </motion.div>
 
-            {/* Large Typography */}
             <motion.h1 
               initial={{ opacity: 0, y: 80 }}
               animate={{ opacity: 1, y: 0 }}
@@ -281,7 +233,6 @@ export default function HomePage() {
               <span className="block font-normal mt-2">Redefined</span>
             </motion.h1>
 
-            {/* Subtitle */}
             <motion.div
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
@@ -294,7 +245,6 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* CTA Buttons */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -325,7 +275,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Minimal Scroll Indicator */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -340,12 +289,10 @@ export default function HomePage() {
         </motion.div>
       </section>
 
-      {/* ==================== FEATURED SECTION (TEXT) ==================== */}
+      {/* ==================== FEATURED SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-white">
         <div className="container mx-auto px-6 md:px-12">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-24 items-center">
-            
-            {/* Text Content - Full Width */}
             <motion.div 
               initial={{ opacity: 0, x: -40 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -376,11 +323,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== ✅ CATEGORIES SECTION (AUTO-SHUFFLE - FIXED) ==================== */}
+      {/* ==================== CATEGORIES SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
-          
-          {/* Section Header */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -396,7 +341,6 @@ export default function HomePage() {
             </h2>
           </motion.div>
 
-          {/* Categories Grid */}
           {loadingCategories ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
               {[1, 2, 3].map((i) => (
@@ -411,8 +355,6 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
               {categories.map((category, index) => {
                 const heroImage = getCategoryHeroImage(category);
-                const categoryProducts = productsByCategory.get(category.slug) || 
-                                        productsByCategory.get(category.category_slug || '') || [];
 
                 return (
                   <motion.div
@@ -430,7 +372,6 @@ export default function HomePage() {
                       href={`/collection/wallcovering/${category.slug}`}
                       className="group relative block aspect-[4/5] rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-500"
                     >
-                      {/* Background Image */}
                       {heroImage ? (
                         <img
                           key={`${category.id}-${categoryImageIndex[category.id]}`}
@@ -440,7 +381,6 @@ export default function HomePage() {
                           loading="lazy"
                         />
                       ) : (
-                        // Fallback kalau belum ada gambar produk
                         <div className="absolute inset-0 bg-krearte-gray-100 flex items-center justify-center">
                           <span className="text-8xl font-light text-krearte-gray-400">
                             {category.name.charAt(0)}
@@ -448,10 +388,8 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      {/* Gradient Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-90 group-hover:opacity-100 transition-opacity duration-500" />
 
-                      {/* Content (Text) */}
                       <div className="relative z-10 h-full flex flex-col justify-end p-6 md:p-8">
                         <h3 className="font-sans text-2xl md:text-3xl font-normal text-white mb-2 drop-shadow-md group-hover:underline decoration-white/60 underline-offset-4 transition-all">
                           {category.name}
@@ -462,7 +400,6 @@ export default function HomePage() {
                           </p>
                         )}
                         
-                        {/* CTA Arrow */}
                         <div className="mt-4 flex items-center text-white/90 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-500">
                           Explore Collection
                           <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -470,22 +407,6 @@ export default function HomePage() {
                           </svg>
                         </div>
                       </div>
-                      
-                      {/* Indicator Dot */}
-                      {categoryProducts.length > 1 && (
-                        <div className="absolute top-4 right-4 flex gap-1.5">
-                          {Array.from({ length: Math.min(3, categoryProducts.length) }).map((_, i) => (
-                            <div
-                              key={i}
-                              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
-                                i === (categoryImageIndex[category.id] % 3)
-                                  ? 'bg-white scale-125'
-                                  : 'bg-white/40'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      )}
                     </Link>
                   </motion.div>
                 );
@@ -493,7 +414,6 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* View All Link */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -517,8 +437,6 @@ export default function HomePage() {
       {/* ==================== PRODUCTS SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-white">
         <div className="container mx-auto px-6 md:px-12">
-          
-          {/* Section Header */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -534,7 +452,6 @@ export default function HomePage() {
             </h2>
           </motion.div>
 
-          {/* Products Grid */}
           {loadingProducts ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
               {[1, 2, 3].map((i) => (
@@ -635,7 +552,6 @@ export default function HomePage() {
                 })}
               </div>
               
-              {/* View All Products Link */}
               <motion.div
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -661,8 +577,6 @@ export default function HomePage() {
       {/* ==================== GALLERY SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
-          
-          {/* Section Header */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -678,7 +592,6 @@ export default function HomePage() {
             </h2>
           </motion.div>
 
-          {/* Masonry-style Gallery Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]">
             {[
               { span: "md:row-span-2 md:col-span-2", label: "Featured Installation" },
@@ -713,7 +626,6 @@ export default function HomePage() {
             ))}
           </div>
           
-          {/* View Gallery Link */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -734,7 +646,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== CUSTOM WITH US SECTION ==================== */}
+      {/* ==================== CUSTOM SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-white">
         <div className="container mx-auto px-6 md:px-12">
           <div className="max-w-4xl mx-auto">
