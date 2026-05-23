@@ -107,7 +107,7 @@ export default function NewProductPage() {
     }
   };
 
-  // ✅ UPDATED: Upload ke VPS via API Route (bukan Supabase)
+  // ✅ UPDATED: Upload ke Supabase, tapi URL dikonversi ke assets.krearte.id
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -121,30 +121,25 @@ export default function NewProductPage() {
         
         const isVideo = type === "video";
         const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
-        const allowedTypes = isVideo 
-          ? ["video/mp4", "video/webm", "video/quicktime"]
-          : ["image/jpeg", "image/png", "image/gif", "image/webp"];
-        
-        if (!allowedTypes.includes(file.type)) {
-          throw new Error(`File type not allowed. Allowed: ${isVideo ? "MP4, WebM, MOV" : "JPG, PNG, GIF, WebP"}`);
-        }
         
         if (file.size > maxSize) {
           throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        // Upload progress simulation
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => Math.min(prev + 10, 90));
         }, 200);
 
-        // ✅ Upload ke API route yang forward ke VPS
+        // ✅ Upload ke VPS
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', type);
 
-        const response = await fetch('/api/upload-to-vps', {
+        const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
+          headers: {
+            'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDt'
+          },
           body: formData,
         });
 
@@ -157,8 +152,6 @@ export default function NewProductPage() {
         }
 
         const result = await response.json();
-        
-        // ✅ URL sudah format https://assets.krearte.id/...
         setImages(prev => [...prev, result.url]);
         
         setTimeout(() => setUploadProgress(0), 500);
@@ -173,28 +166,28 @@ export default function NewProductPage() {
     }
   };
 
-  const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
-  };
+    const removeImage = (index: number) => {
+      setImages(prev => prev.filter((_, i) => i !== index));
+    };
 
-  const toggleAvailableMaterial = (materialId: string) => {
-    setFormData(prev => {
-      const isAlreadyAvailable = prev.availableMaterialIds.includes(materialId);
-      
-      if (isAlreadyAvailable) {
-        return {
-          ...prev,
-          availableMaterialIds: prev.availableMaterialIds.filter(id => id !== materialId),
-          recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
-        };
-      } else {
-        return {
-          ...prev,
-          availableMaterialIds: [...prev.availableMaterialIds, materialId]
-        };
-      }
-    });
-  };
+    const toggleAvailableMaterial = (materialId: string) => {
+      setFormData(prev => {
+        const isAlreadyAvailable = prev.availableMaterialIds.includes(materialId);
+        
+        if (isAlreadyAvailable) {
+          return {
+            ...prev,
+            availableMaterialIds: prev.availableMaterialIds.filter(id => id !== materialId),
+            recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
+          };
+        } else {
+          return {
+            ...prev,
+            availableMaterialIds: [...prev.availableMaterialIds, materialId]
+          };
+        }
+      });
+    };
 
   const toggleRecommendedMaterial = (materialId: string) => {
     if (!formData.availableMaterialIds.includes(materialId)) {
@@ -345,7 +338,7 @@ export default function NewProductPage() {
               </p>
             </div>
 
-            {/* ✅ UPDATED: Category dengan lebih banyak pilihan */}
+            {/* ✅ Category dengan lebih banyak pilihan */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">
                 Category *
