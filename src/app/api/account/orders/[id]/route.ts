@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+// ✅ 1. Import authOptions dari file terpisah (tanpa special chars)
+// Pindahkan authOptions ke: lib/auth.ts atau lib/next-auth.ts
+import { authOptions } from "@/lib/auth";
+
+// ✅ 2. Singleton pattern untuk PrismaClient (mencegah multiple connections)
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+const prisma = globalForPrisma.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 export async function GET(
   request: Request,
@@ -12,7 +22,8 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
+      // ✅ 3. Check user.id (bukan email) untuk konsistensi
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -47,10 +58,10 @@ export async function GET(
       );
     }
 
-    // Check if order belongs to user
-    if (!order.userId || order.userId !== session.user.id) {
+    // ✅ 4. Pastikan session.user.id ada sebelum compare
+    if (!session.user.id || order.userId !== session.user.id) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: "Forbidden" },
         { status: 403 }
       );
     }
@@ -59,6 +70,8 @@ export async function GET(
       success: true,
       order: {
         ...order,
+        createdAt: order.createdAt.toISOString(),
+        updatedAt: order.updatedAt.toISOString(),
         items: order.items.map((item) => ({
           ...item,
           productName: item.product?.name || "Unknown Product",
@@ -66,13 +79,13 @@ export async function GET(
         })),
       },
     });
+    
   } catch (error) {
     console.error("Error fetching order detail:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch order detail" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
+  // ✅ 5. Hapus prisma.$disconnect() - tidak diperlukan di API routes Next.js
 }
