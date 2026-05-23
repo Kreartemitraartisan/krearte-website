@@ -345,6 +345,7 @@ export default function NewProductPage() {
               </p>
             </div>
 
+            {/* ✅ UPDATED: Category dengan lebih banyak pilihan */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">
                 Category *
@@ -358,6 +359,18 @@ export default function NewProductPage() {
               >
                 <option value="wallcovering">Wallcovering</option>
                 <option value="designer">Designer Collection</option>
+                <option value="zen">Zen</option>
+                <option value="chinoiserie">Chinoiserie</option>
+                <option value="floral">Floral & Leaves</option>
+                <option value="animals">Animals</option>
+                <option value="geometric">Geometric</option>
+                <option value="abstract">Abstract</option>
+                <option value="classic">Classic</option>
+                <option value="modern">Modern</option>
+                <option value="tropical">Tropical</option>
+                <option value="vintage">Vintage</option>
+                <option value="minimalist">Minimalist</option>
+                <option value="luxury">Luxury</option>
               </select>
             </div>
 
