@@ -1,54 +1,63 @@
+// src/app/api/account/stats/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { PrismaClient } from "@prisma/client";
+// ✅ Gunakan prisma singleton (JANGAN new PrismaClient()!)
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    // Get orders
-    const orders = await prisma.order.findMany({
-      where: {
-        user: {
-          email: session.user.email,
+    // ✅ Fetch stats untuk user yang login
+    const [totalOrders, totalSpent, wishlistCount] = await Promise.all([
+      // Total orders
+      prisma.order.count({
+        where: { userId: session.user.id },
+      }),
+      
+      // Total spent (sum of order totals)
+      prisma.order.aggregate({
+        where: { 
+          userId: session.user.id,
+          status: { in: ['completed', 'delivered'] } // hanya order yang selesai
         },
-      },
-      select: {
-        total: true,
-        id: true,
-      },
-    });
-
-    // Get wishlist count (if you have wishlist model)
-    const wishlistCount = 0; // Replace with actual query if you have wishlist
-
-    const stats = {
-      totalOrders: orders.length,
-      totalSpent: orders.reduce((sum, order) => sum + order.total, 0),
-      wishlistItems: wishlistCount,
-    };
+        _sum: {
+          total: true,
+        },
+      }),
+      
+      // Wishlist items count
+      prisma.wishlist.count({
+        where: { userId: session.user.id },
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
-      stats,
+      stats: {
+        totalOrders,
+        totalSpent: totalSpent._sum.total || 0,
+        wishlistItems: wishlistCount,
+      },
     });
+
   } catch (error) {
-    console.error("Error fetching stats:", error);
+    console.error("Error fetching account stats:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch stats" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
