@@ -115,7 +115,7 @@ export default function ProductDetail() {
     }
   }, [params.slug]);
 
-  // Fetch materials dan pisahkan menjadi Materials & Add-Ons
+  // ✅ FIX: Fetch materials dan pisahkan menjadi Materials & Add-Ons dengan filter yang konsisten
   useEffect(() => {
     async function fetchMaterials() {
       if (!params.slug || !product) return;
@@ -127,21 +127,36 @@ export default function ProductDetail() {
         if (result.success) {
           const allItems = result.materials || [];
           
-          // Filter: Materials (bukan Jasa)
-          const materialsOnly = allItems.filter(
-            (m: Material) => !m.category.toLowerCase().includes('service')
-          );
+          // ✅ FIX: Filter Materials - Exclude SEMUA jasa/add-on/print/design/2.5d/sample
+          const materialsOnly = allItems.filter((m: Material) => {
+            const cat = m.category.toLowerCase();
+            const name = m.name.toLowerCase();
+            
+            return !cat.includes('service') && 
+                   !cat.includes('jasa') && 
+                   !cat.includes('add-on') &&
+                   !cat.includes('print') &&
+                   !cat.includes('design') &&
+                   !name.includes('2.5d') &&
+                   !name.includes('sample') &&
+                   m.pricePerM2 > 0;
+          });
 
-          // Filter: Services/Add-Ons (Jasa)
-          const servicesOnly = allItems.filter(
-            (m: Material) => {
-              const cat = m.category.toLowerCase();
-              return cat.includes('service') || 
-                    cat.includes('jasa') || 
-                    cat.includes('print') ||
-                    cat.includes('design');
-            }
-          ).map((service: Material) => ({
+          // ✅ FIX: Filter Services/Add-Ons - Include jasa/add-on/print/design, exclude sample
+          const servicesOnly = allItems.filter((m: Material) => {
+            const cat = m.category.toLowerCase();
+            const name = m.name.toLowerCase();
+            
+            const isService = cat.includes('service') || 
+                             cat.includes('jasa') || 
+                             cat.includes('add-on') ||
+                             cat.includes('print') ||
+                             cat.includes('design');
+            
+            const isSample = name.includes('sample') || cat.includes('sample');
+            
+            return isService && !isSample;
+          }).map((service: Material) => ({
             id: service.id,
             name: service.name,
             description: service.description || '',
@@ -155,13 +170,30 @@ export default function ProductDetail() {
           let allAddOns = [...servicesOnly];
           
           if (isDesignerCollection && product.is25DEligible) {
-            allAddOns.push({
-              id: '25d-effect',
-              name: '2.5D Print Effect',
-              description: 'Raised texture that you can feel - adds depth and luxury',
-              price: 500000,
-              type: 'effect' as const
-            });
+            // Cari 2.5D dari database dulu
+            const existing25D = allItems.find((m: Material) => 
+              m.name.toLowerCase().includes('2.5d') || 
+              m.name.toLowerCase().includes('25d')
+            );
+            
+            if (existing25D) {
+              allAddOns.push({
+                id: existing25D.id,
+                name: existing25D.name,
+                description: existing25D.description || 'Raised texture effect',
+                price: existing25D.pricePerM2,
+                type: 'effect' as const
+              });
+            } else {
+              // Fallback jika tidak ada di database
+              allAddOns.push({
+                id: '25d-effect',
+                name: '2.5D Print Effect',
+                description: 'Raised texture that you can feel - adds depth and luxury',
+                price: 80000, // Rp 80.000/m² sesuai screenshot
+                type: 'effect' as const
+              });
+            }
           }
           
           setMaterials(materialsOnly);
@@ -237,7 +269,7 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ Helper: Calculate panel & waste info
+  // Helper: Calculate panel & waste info
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
@@ -245,7 +277,6 @@ export default function ProductDetail() {
     const heightWithOverlap = (heightCm + 6) / 100;
     const actualArea = widthWithOverlap * heightWithOverlap;
     
-    // ✅ TypeScript sudah tahu selectedMaterial bukan null di sini
     const materialWidth = selectedMaterial.width 
       ? parseFloat(selectedMaterial.width) 
       : 1.37;
@@ -263,7 +294,7 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ Calculate total price dengan rumus yang benar
+  // Calculate total price
   const calculateTotalPrice = () => {
     if (!selectedMaterial && product) {
       const areaM2 = (widthCm / 100) * (heightCm / 100);
@@ -274,7 +305,7 @@ export default function ProductDetail() {
     const widthM = widthCm / 100;
     const heightM = heightCm / 100;
 
-    const widthWithOverlap = (widthCm + 6) / 100; // cm + 6cm → m
+    const widthWithOverlap = (widthCm + 6) / 100;
     const heightWithOverlap = (heightCm + 6) / 100;
     
     const actualArea = widthWithOverlap * heightWithOverlap;
@@ -324,24 +355,6 @@ export default function ProductDetail() {
   };
 
   const panelInfo = getPanelInfo();
-  console.log('📊 Panel Info:', panelInfo);
-  console.log('📊 Panel Info Details:', {
-    actualArea: panelInfo?.actualArea,
-    wasteArea: panelInfo?.wasteArea,
-    totalPanelArea: panelInfo?.totalPanelArea,
-    panelsNeeded: panelInfo?.panelsNeeded,
-  });
-
-  {/* Panel Info */}
-  {panelInfo && (
-    <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
-      <span className="font-light text-krearte-gray-600">Panels needed:</span>
-      <span className="font-normal text-krearte-black">
-        {panelInfo.panelsNeeded} panel(s) ({panelInfo.materialWidth.toFixed(2)}m width)
-        {/* ✅ Gunakan panelInfo.materialWidth */}
-      </span>
-    </div>
-  )}
 
   // Add to cart handler
   const handleAddToCart = () => {
@@ -398,7 +411,6 @@ export default function ProductDetail() {
     const shareTitle = `${product.name} | Krearte`;
     const shareText = `Check out ${product.name} - Luxury wallcovering from Krearte`;
 
-    // Method 1: Web Share API (Mobile)
     if (typeof navigator !== 'undefined' && 'share' in navigator) {
       try {
         await navigator.share({
@@ -408,22 +420,17 @@ export default function ProductDetail() {
         });
         console.log('✅ Shared successfully');
       } catch (error: any) {
-        // User cancelled or error
         if (error.name !== 'AbortError') {
           console.error('Share error:', error);
-          // Fallback ke copy link
           copyToClipboard(shareUrl);
         }
       }
     } else {
-      // Method 2: Copy to clipboard (Desktop)
       copyToClipboard(shareUrl);
     }
   };
 
-  // ✅ Helper function untuk copy link
   const copyToClipboard = (text: string) => {
-    // Method A: Modern clipboard API
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         alert('✅ Link copied to clipboard!\n\nYou can now paste it anywhere to share.');
@@ -432,12 +439,10 @@ export default function ProductDetail() {
         fallbackCopy(text);
       });
     } else {
-      // Method B: Fallback untuk browser lama
       fallbackCopy(text);
     }
   };
 
-  // ✅ Fallback copy method
   const fallbackCopy = (text: string) => {
     const textArea = document.createElement('textarea');
     textArea.value = text;
@@ -452,7 +457,6 @@ export default function ProductDetail() {
       alert('✅ Link copied to clipboard!\n\nYou can now paste it anywhere to share.');
     } catch (err) {
       console.error('Fallback copy failed:', err);
-      // Last resort: show prompt
       const userConfirmed = window.confirm(
         'Unable to copy automatically.\n\nPlease copy this link manually:\n\n' + text
       );
@@ -533,7 +537,6 @@ export default function ProductDetail() {
               >
                 {product.images && product.images.length > 0 ? (
                   (() => {
-                    // ✅ GUNAKAN selectedImage STATE, BUKAN SELALU IMAGES[0]
                     const currentMedia = product.images[selectedImage];
                     const isVideo = currentMedia?.endsWith('.mp4') || currentMedia?.endsWith('.webm');
                     
@@ -570,7 +573,7 @@ export default function ProductDetail() {
                       onClick={() => setSelectedImage(index)}
                       className={`relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden transition-all ${
                         selectedImage === index
-                          ? "border-2 border-krearte-black shadow-md" // ✅ Border solid + shadow
+                          ? "border-2 border-krearte-black shadow-md"
                           : "border-2 border-transparent hover:border-krearte-gray-300"
                       }`}
                     >
@@ -581,7 +584,6 @@ export default function ProductDetail() {
                             className="w-full h-full object-cover"
                             muted
                           />
-                          {/* Video Badge */}
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
                             <svg className="w-6 h-6 text-krearte-white drop-shadow-lg" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
@@ -769,7 +771,6 @@ export default function ProductDetail() {
 
                 {/* Add-Ons Section - Dropdown */}
                 <div className="mb-6">
-                  {/* Dropdown Header/Button */}
                   <button
                     type="button"
                     onClick={() => setIsAddOnsOpen(!isAddOnsOpen)}
@@ -787,7 +788,6 @@ export default function ProductDetail() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {/* Show total if any selected */}
                       {selectedAddOns.length > 0 && (
                         <span className="text-sm font-normal text-krearte-black">
                           {formatCurrency(
@@ -798,7 +798,6 @@ export default function ProductDetail() {
                           )}
                         </span>
                       )}
-                      {/* Chevron Icon */}
                       <svg
                         className={`w-5 h-5 text-krearte-gray-600 transition-transform duration-200 ${
                           isAddOnsOpen ? 'rotate-180' : ''
@@ -812,7 +811,6 @@ export default function ProductDetail() {
                     </div>
                   </button>
 
-                  {/* Dropdown Content - Animated */}
                   <motion.div
                     initial={false}
                     animate={{
@@ -868,7 +866,7 @@ export default function ProductDetail() {
                   </motion.div>
                 </div>
 
-                {/* Dimensions Calculator (dalam CM) */}
+                {/* Dimensions Calculator */}
                 <div className="mb-8">
                   <label className="block text-sm font-normal text-krearte-black mb-4">
                     Dimensions (centimeters)
@@ -884,7 +882,6 @@ export default function ProductDetail() {
                         value={widthCm}
                         onChange={(e) => {
                           const value = e.target.value;
-                          // ✅ Allow user to type freely
                           if (value === '') {
                             setWidthCm(0);
                             return;
@@ -892,7 +889,6 @@ export default function ProductDetail() {
                           setWidthCm(parseFloat(value) || 0);
                         }}
                         onBlur={(e) => {
-                          // ✅ Validate only when user finishes editing
                           const value = parseFloat(e.target.value);
                           setWidthCm(Math.max(10, isNaN(value) ? 100 : value));
                         }}
@@ -930,7 +926,6 @@ export default function ProductDetail() {
                   {/* Price Breakdown */}
                   {(selectedMaterial || materials.length === 0) && panelInfo && (
                     <div className="p-4 bg-krearte-gray-50 rounded-lg space-y-2">
-                      {/* Dimensions Info */}
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">Dimensions:</span>
                         <span className="font-normal text-krearte-black">
@@ -938,7 +933,6 @@ export default function ProductDetail() {
                         </span>
                       </div>
                       
-                      {/* Overlap Info */}
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">With 3cm overlap:</span>
                         <span className="font-normal text-krearte-black">
@@ -946,7 +940,6 @@ export default function ProductDetail() {
                         </span>
                       </div>
                       
-                      {/* Panel Info */}
                       {selectedMaterial && (
                         <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                           <span className="font-light text-krearte-gray-600">Panels needed:</span>
@@ -956,7 +949,6 @@ export default function ProductDetail() {
                         </div>
                       )}
                       
-                      {/* ✅ Material Needed (Total) */}
                       {selectedMaterial && (
                         <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                           <span className="font-light text-krearte-gray-600">Material Needed:</span>
@@ -966,7 +958,6 @@ export default function ProductDetail() {
                         </div>
                       )}
                       
-                      {/* ✅ Print Area */}
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">Print Area:</span>
                         <span className="font-normal text-krearte-black">
@@ -974,7 +965,6 @@ export default function ProductDetail() {
                         </span>
                       </div>
                       
-                      {/* ✅ Waste Area */}
                       {selectedMaterial && (
                         <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                           <span className="font-light text-krearte-gray-600">Waste:</span>
@@ -984,7 +974,6 @@ export default function ProductDetail() {
                         </div>
                       )}
                       
-                      {/* Material Cost - pakai panelInfo.actualArea */}
                       <div className="flex justify-between text-sm mt-2">
                         <span className="font-light text-krearte-gray-600">
                           Material ({selectedMaterial ? getPriceByRole(selectedMaterial).label : 'Standard'}):
@@ -994,7 +983,6 @@ export default function ProductDetail() {
                         </span>
                       </div>
                       
-                      {/* Waste Cost - pakai panelInfo.wasteArea */}
                       {selectedMaterial && (
                         <div className="flex justify-between text-sm">
                           <span className="font-light text-krearte-gray-600">Waste (cutting):</span>
@@ -1004,7 +992,6 @@ export default function ProductDetail() {
                         </div>
                       )}
                       
-                      {/* Add-Ons in breakdown */}
                       {selectedAddOns.length > 0 && (
                         <div className="border-t border-krearte-gray-200 pt-2 space-y-1">
                           <p className="text-xs font-medium text-krearte-gray-600 mb-2">Add-Ons:</p>
@@ -1016,7 +1003,7 @@ export default function ProductDetail() {
                                 <span className="font-light text-krearte-gray-600">{addOn.name}:</span>
                                 <span className="font-light text-krearte-black">
                                   {addOn.type === 'effect'
-                                    ? `${formatCurrency(addOn.price)} × ${panelInfo.actualArea.toFixed(2)} m²`
+                                    ? `${formatCurrency(addOn.price)} × {panelInfo.actualArea.toFixed(2)} m²`
                                     : formatCurrency(addOn.price)
                                   }
                                 </span>
@@ -1026,7 +1013,6 @@ export default function ProductDetail() {
                         </div>
                       )}
                       
-                      {/* Total */}
                       <div className="border-t border-krearte-gray-200 pt-2 mt-2">
                         <div className="flex justify-between">
                           <span className="font-normal text-krearte-black">Total:</span>
