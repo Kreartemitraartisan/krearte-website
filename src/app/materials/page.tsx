@@ -16,6 +16,8 @@ export default function MaterialsPage() {
           name: "Standard PVC",
           texture: "Smooth / Industrial",
           price: 345000,
+          // 🖼️ GANTI URL INI dengan path gambar close-up VPS/Supabase kamu nanti
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Standard+PVC+Closeup", 
           description: "The foundation of Krearte collection. Clean, minimal, and endlessly adaptable.",
           bestFor: "Living rooms, bedrooms, offices",
         },
@@ -23,6 +25,7 @@ export default function MaterialsPage() {
           name: "Self Adhesive",
           texture: "Fabric Back",
           price: 335000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Self+Adhesive+Closeup",
           description: "DIY-friendly without compromising quality. Peel, stick, transform.",
           bestFor: "Quick renovations, rental spaces",
         },
@@ -30,6 +33,7 @@ export default function MaterialsPage() {
           name: "Non-Woven",
           texture: "White / Creamy Raw",
           price: 450000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Non-Woven+Closeup",
           description: "Breathable material that's easy to install and remove. Eco-conscious choice.",
           bestFor: "Eco-friendly projects, temporary installations",
         },
@@ -37,6 +41,7 @@ export default function MaterialsPage() {
           name: "Fabric Back",
           texture: "Cross Hatch / Fine Sand",
           price: 385000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Fabric+Back+Closeup",
           description: "The perfect balance between durability and sophistication.",
           bestFor: "Commercial spaces, hospitality",
         },
@@ -51,6 +56,7 @@ export default function MaterialsPage() {
           name: "Straw Raw Metallic",
           texture: "Gold / Flex",
           price: 400000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic+Closeup",
           description: "Subtle shimmer with organic texture. Luxury that doesn't shout.",
           bestFor: "Feature walls, dining rooms",
         },
@@ -58,6 +64,7 @@ export default function MaterialsPage() {
           name: "Abstract Embossing",
           texture: "Silver Metallic",
           price: 750000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Abstract+Embossing+Closeup",
           description: "Bold patterns with reflective depth. Art for your walls.",
           bestFor: "Statement walls, galleries, boutiques",
         },
@@ -65,6 +72,7 @@ export default function MaterialsPage() {
           name: "Japanese Silk",
           texture: "Metallic Silver",
           price: 860000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Japanese+Silk+Closeup",
           description: "Our premium offering. Inspired by traditional Japanese craftsmanship.",
           bestFor: "Luxury residences, high-end hospitality",
         },
@@ -79,6 +87,7 @@ export default function MaterialsPage() {
           name: "2.5D Print",
           texture: "Raised Print Effect",
           price: 500000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=2.5D+Print+Closeup",
           description: "Add-on service. Your chosen pattern with tactile depth you can feel.",
           bestFor: "Art walls, branded spaces, installations",
           note: "Add-on: +Rp 500.000/m² from base material price",
@@ -87,6 +96,7 @@ export default function MaterialsPage() {
           name: "Custom Print",
           texture: "Your Design",
           price: 200000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Custom+Print+Closeup",
           description: "Bring your vision to life. Any pattern, any color, any size.",
           bestFor: "Branded spaces, personal art, unique projects",
         },
@@ -184,64 +194,68 @@ export default function MaterialsPage() {
                       whileInView={{ opacity: 1, y: 0 }}
                       viewport={{ once: true }}
                       transition={{ delay: productIndex * 0.1 }}
-                      className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6 hover:border-krearte-black transition-colors group"
+                      className="bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:border-krearte-black transition-colors group"
                     >
-                      {/* Price Badge */}
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider">
+                      {/* ✅ CLOSE-UP IMAGE DI ATAS CARD */}
+                      <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
+                        <img
+                          src={product.image || "https://placehold.co/800x600/e8e6e1/333333?text=Material+Closeup"}
+                          alt={`${product.name} material close-up detail`}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                        {/* Optional: Texture badge overlay on image */}
+                        <div className="absolute top-4 left-4 bg-krearte-black/80 backdrop-blur-sm text-krearte-white text-xs px-3 py-1 rounded-full">
                           {product.texture}
-                        </span>
-                        {product.note && (
-                          <span className="text-xs font-medium text-krearte-black bg-krearte-gray-100 px-2 py-1 rounded">
-                            Add-on
-                          </span>
-                        )}
+                        </div>
                       </div>
 
-                      {/* Product Name */}
-                      <h3 className="font-sans text-xl font-normal mb-3 text-krearte-black group-hover:underline decoration-krearte-gray-300 underline-offset-4">
-                        {product.name}
-                      </h3>
+                      {/* Card Content */}
+                      <div className="p-6">
+                        {/* Product Name */}
+                        <h3 className="font-sans text-xl font-normal mb-3 text-krearte-black group-hover:underline decoration-krearte-gray-300 underline-offset-4">
+                          {product.name}
+                        </h3>
 
-                      {/* Description */}
-                      <p className="text-sm font-light text-krearte-gray-600 mb-4 leading-relaxed">
-                        {product.description}
-                      </p>
+                        {/* Description */}
+                        <p className="text-sm font-light text-krearte-gray-600 mb-4 leading-relaxed">
+                          {product.description}
+                        </p>
 
-                      {/* Best For */}
-                      <div className="mb-4">
-                        <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
-                          Best For
-                        </p>
-                        <p className="text-sm font-light text-krearte-gray-600">
-                          {product.bestFor}
-                        </p>
-                      </div>
-
-                      {/* Price */}
-                      <div className="pt-4 border-t border-krearte-gray-100">
-                        <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
-                          Starting From
-                        </p>
-                        <p className="text-lg font-normal text-krearte-black">
-                          {formatCurrency(product.price)}<span className="text-sm font-light text-krearte-gray-500">/m²</span>
-                        </p>
-                        {product.note && (
-                          <p className="text-xs text-krearte-gray-400 mt-1">
-                            {product.note}
+                        {/* Best For */}
+                        <div className="mb-4">
+                          <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
+                            Best For
                           </p>
-                        )}
-                      </div>
+                          <p className="text-sm font-light text-krearte-gray-600">
+                            {product.bestFor}
+                          </p>
+                        </div>
 
-                      {/* CTA */}
-                      <div className="mt-6">
-                        <Link
-                          href="/materials#samples"
-                          className="inline-flex items-center text-sm font-medium text-krearte-black hover:text-krearte-gray-600 transition-colors"
-                        >
-                          Order Sample
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Link>
+                        {/* Price */}
+                        <div className="pt-4 border-t border-krearte-gray-100">
+                          <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
+                            Starting From
+                          </p>
+                          <p className="text-lg font-normal text-krearte-black">
+                            {formatCurrency(product.price)}<span className="text-sm font-light text-krearte-gray-500">/m²</span>
+                          </p>
+                          {product.note && (
+                            <p className="text-xs text-krearte-gray-400 mt-1">
+                              {product.note}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* CTA */}
+                        <div className="mt-6">
+                          <Link
+                            href="/materials#samples"
+                            className="inline-flex items-center text-sm font-medium text-krearte-black hover:text-krearte-gray-600 transition-colors"
+                          >
+                            Order Sample
+                            <ArrowRight className="w-4 h-4 ml-2" />
+                          </Link>
+                        </div>
                       </div>
                     </motion.div>
                   ))}
@@ -306,7 +320,7 @@ export default function MaterialsPage() {
               <p className="text-sm font-light text-krearte-gray-400 mb-6 tracking-widest uppercase">
                 Experience Before You Commit
               </p>
-              <h2 className="font-sans text-3xl md:text-5xl font-light mb-8 mb-8">
+              <h2 className="font-sans text-3xl md:text-5xl font-light mb-8">
                 Order Material Samples
               </h2>
               <p className="text-lg font-light text-krearte-gray-300 mb-12 leading-relaxed">

@@ -13,18 +13,22 @@ interface Category {
   products_count?: { count: number }[];
 }
 
+// ✅ FIX 1: Update interface - params sekarang Promise
 interface CollectionPageProps {
-  params: {
+  params: Promise<{
     collectionSlug: string;
-  };
+  }>;
 }
 
+// ✅ FIX 2: Function tetap async (karena sudah async)
 export default async function CollectionPage({ params }: CollectionPageProps) {
   const supabase = createAdminClient();
-  const { collectionSlug } = params;
+  
+  // ✅ FIX 3: Await params sebelum destructuring
+  const { collectionSlug } = await params;
 
   // Fetch categories untuk collection ini
-  const { data: categories, error } = await supabase
+  const {  data: categories, error } = await supabase
     .from('categories')
     .select(`
       *,

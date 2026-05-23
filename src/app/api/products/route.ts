@@ -10,17 +10,16 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
 
     const limitParam = searchParams.get("limit");
-    const category = searchParams.get("category"); // Legacy: filter by category string
-    const categorySlug = searchParams.get("categorySlug"); // New: filter by category slug
+    const category = searchParams.get("category");
+    const categorySlug = searchParams.get("categorySlug");
     const collectionType = searchParams.get("collectionType");
     const slug = searchParams.get("slug");
 
     const limit = limitParam ? parseInt(limitParam) : undefined;
 
-    // ✅ SAFE where clause
+    // ✅ Build WHERE clause safely
     const where: any = {};
 
-    // Legacy category filter (exact match on category string)
     if (category) {
       where.category = {
         equals: category,
@@ -28,7 +27,6 @@ export async function GET(request: Request) {
       };
     }
 
-    // New category_slug filter (for new category system)
     if (categorySlug) {
       where.category_slug = {
         equals: categorySlug,
@@ -47,7 +45,7 @@ export async function GET(request: Request) {
       where.slug = slug;
     }
 
-    // ✅ FETCH PRODUCTS (safe even if DB empty)
+    // ✅ FETCH PRODUCTS from Prisma
     const products = await prisma.product.findMany({
       where,
       include: {
@@ -59,7 +57,7 @@ export async function GET(request: Request) {
       ...(limit ? { take: limit } : {}),
     });
 
-    // 🟢 IF NO PRODUCTS → RETURN EMPTY SAFE RESPONSE
+    // 🟢 Return empty if no products
     if (!products || products.length === 0) {
       return NextResponse.json({
         success: true,
@@ -68,12 +66,13 @@ export async function GET(request: Request) {
       });
     }
 
-    // ✅ SAFE MATERIAL PROCESSING
+    // ✅ Process each product to add computed priceRange
     const productsWithPrices = await Promise.all(
       products.map(async (product) => {
         try {
           const materialIds = product.availableMaterialIds || [];
 
+          // If no materials, use base price
           if (!materialIds || materialIds.length === 0) {
             return {
               ...product,
@@ -85,6 +84,7 @@ export async function GET(request: Request) {
             };
           }
 
+          // Fetch materials for price calculation
           const materials = await prisma.material.findMany({
             where: {
               id: { in: materialIds },
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
             },
           });
 
-          // 🟡 SAFE FILTER (no crash if null)
+          // Filter out service/jasa materials
           const actualMaterials = (materials || []).filter((m) => {
             const cat = (m.category || "").toLowerCase();
             const name = (m.name || "").toLowerCase();
@@ -111,6 +111,7 @@ export async function GET(request: Request) {
             return true;
           });
 
+          // If no valid materials, fallback to base price
           if (actualMaterials.length === 0) {
             return {
               ...product,
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
             };
           }
 
+          // Calculate price range from materials
           const prices = actualMaterials.map(
             (m) => (m.pricePerM2 || 0) + (m.waste || 0)
           );
@@ -131,12 +133,13 @@ export async function GET(request: Request) {
 
           return {
             ...product,
-            price: min,
+            price: min, // Use min as display price
             priceRange: { min, max },
             hasMaterialPrices: true,
           };
         } catch (err) {
-          // 🟢 per-product fallback (IMPORTANT supaya tidak 500 global)
+          // Fallback per product if material fetch fails
+          console.warn(`⚠️ Failed to process materials for product ${product.id}`);
           return {
             ...product,
             priceRange: {
@@ -160,8 +163,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to fetch products",
+        error: error instanceof Error ? error.message : "Failed to fetch products",
       },
       { status: 500 }
     );
@@ -186,7 +188,6 @@ export async function POST(request: Request) {
         collectionType: body.collectionType || "wallcovering",
         is25DEligible: body.is25DEligible || false,
         stock: body.stock || 0,
-        // ✅ NEW: Support category_slug for new category system
         category_slug: body.category_slug || null,
         sizes: {
           create:
@@ -210,8 +211,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to create product",
+        error: error instanceof Error ? error.message : "Failed to create product",
       },
       { status: 500 }
     );
@@ -247,7 +247,6 @@ export async function PUT(request: Request) {
         collectionType: body.collectionType,
         is25DEligible: body.is25DEligible,
         stock: body.stock,
-        // ✅ NEW: Update category_slug
         category_slug: body.category_slug,
         sizes: body.sizes
           ? {
@@ -273,8 +272,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to update product",
+        error: error instanceof Error ? error.message : "Failed to update product",
       },
       { status: 500 }
     );
@@ -308,8 +306,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to delete product",
+        error: error instanceof Error ? error.message : "Failed to delete product",
       },
       { status: 500 }
     );

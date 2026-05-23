@@ -44,19 +44,13 @@ export function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const wallcoveringDropdownRef = useRef<HTMLDivElement>(null);
   
-  // Close user menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        userMenuRef.current && 
-        !userMenuRef.current.contains(event.target as Node)
-      ) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
       }
-      if (
-        wallcoveringDropdownRef.current && 
-        !wallcoveringDropdownRef.current.contains(event.target as Node)
-      ) {
+      if (wallcoveringDropdownRef.current && !wallcoveringDropdownRef.current.contains(event.target as Node)) {
         setWallcoveringDropdownOpen(false);
       }
     };
@@ -70,10 +64,10 @@ export function Header() {
     };
   }, [userMenuOpen, wallcoveringDropdownOpen]);
 
-  // ✅ Check admin
+  // Check admin role
   const isAdmin = session?.user?.role === "admin";
 
-  // ✅ Debug log
+  // Debug log
   useEffect(() => {
     console.log('📦 [HEADER] Current session:', {
       hasSession: !!session,
@@ -83,7 +77,7 @@ export function Header() {
     });
   }, [session, isAdmin]);
 
-  // Show loading atau skeleton
+  // Loading skeleton
   if (status === "loading") {
     return (
       <motion.header
@@ -132,20 +126,29 @@ export function Header() {
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8">
               
-              {/* Wallcovering Dropdown */}
+              {/* ✅ Wallcovering: Click = Page, Hover = Dropdown */}
               <div 
-                className="relative"
+                className="relative group"
                 ref={wallcoveringDropdownRef}
                 onMouseEnter={() => setWallcoveringDropdownOpen(true)}
                 onMouseLeave={() => setWallcoveringDropdownOpen(false)}
               >
-                <button
-                  className="flex items-center gap-1 text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors relative group py-2"
-                >
-                  Wallcovering
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${wallcoveringDropdownOpen ? 'rotate-180' : ''}`} />
-                  <span className="absolute -bottom-1 left-0 w-0 h-px bg-krearte-black transition-all duration-300 group-hover:w-full" />
-                </button>
+                <div className="flex items-center">
+                  {/* Link ke Wallcovering Page */}
+                  <Link
+                    href="/collection/wallcovering"
+                    className="text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors py-2 flex items-center"
+                    onClick={() => setWallcoveringDropdownOpen(false)}
+                  >
+                    Wallcovering
+                  </Link>
+                  
+                  {/* Chevron untuk dropdown indicator */}
+                  <ChevronDown className={`w-4 h-4 ml-1 transition-transform duration-200 ${wallcoveringDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+                
+                {/* Underline animation */}
+                <span className="absolute -bottom-1 left-0 w-0 h-px bg-krearte-black transition-all duration-300 group-hover:w-full" />
 
                 {/* Dropdown Popup */}
                 <AnimatePresence>
@@ -283,6 +286,7 @@ export function Header() {
               <button
                 onClick={openCart}
                 className="relative p-2 hover:bg-krearte-gray-100 rounded-full transition-colors"
+                aria-label="Shopping cart"
               >
                 <ShoppingBag className="w-5 h-5 text-krearte-black" />
                 {itemCount > 0 && (
@@ -296,6 +300,7 @@ export function Header() {
               <button
                 onClick={() => setMobileMenuOpen(true)}
                 className="md:hidden p-2 hover:bg-krearte-gray-100 rounded-full transition-colors"
+                aria-label="Open menu"
               >
                 <Menu className="w-5 h-5 text-krearte-black" />
               </button>
@@ -316,7 +321,6 @@ export function Header() {
             <div className="flex flex-col h-full p-6">
               {/* Mobile Header */}
               <div className="flex justify-between items-center mb-12">
-                {/* Mobile Logo */}
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className="h-8">
                   <img
                     src="/images/logo-krearte.png"
@@ -329,6 +333,7 @@ export function Header() {
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="p-2 hover:bg-krearte-gray-100 rounded-full transition-colors"
+                  aria-label="Close menu"
                 >
                   <X className="w-6 h-6" />
                 </button>
@@ -452,6 +457,7 @@ function MobileAccordion({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between w-full text-2xl font-light text-krearte-black py-2"
+        aria-expanded={isOpen}
       >
         {title}
         <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />

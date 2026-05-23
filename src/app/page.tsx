@@ -37,6 +37,37 @@ interface Category {
   parent_id: string | null;
 }
 
+// ✅ Fallback categories dengan data yang benar
+const FALLBACK_CATEGORIES: Category[] = [
+  {
+    id: "1",
+    name: "Zen Collection",
+    slug: "zen",
+    description: "Minimalist patterns inspired by Japanese aesthetics",
+    image_url: null,
+    collection_type: "wallcovering",
+    parent_id: null,
+  },
+  {
+    id: "2",
+    name: "Floral & Botanical",
+    slug: "flower-leaves",
+    description: "Beautiful floral patterns and botanical designs",
+    image_url: null,
+    collection_type: "wallcovering",
+    parent_id: null,
+  },
+  {
+    id: "3",
+    name: "Geometric Patterns",
+    slug: "geometric",
+    description: "Modern geometric shapes and patterns",
+    image_url: null,
+    collection_type: "wallcovering",
+    parent_id: null,
+  },
+];
+
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
@@ -55,12 +86,8 @@ export default function HomePage() {
       try {
         const response = await fetch("/api/products?limit=6");
         
-        // Check if response is OK
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
-        // Check content type
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
           throw new Error("Response is not JSON");
@@ -70,8 +97,6 @@ export default function HomePage() {
         
         if (result.success) {
           setFeaturedProducts(result.products || []);
-        } else {
-          console.error("API returned error:", result);
         }
       } catch (error) {
         console.error("Error fetching products:", error);
@@ -83,18 +108,18 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
-  // Fetch categories
+  // ✅ Fetch categories dengan proper error handling
   useEffect(() => {
     async function fetchCategories() {
       try {
+        console.log('📂 Fetching categories for homepage...');
+        
         const response = await fetch('/api/categories?collectionType=wallcovering&parentId=null');
         
-        // Check if response is OK
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        // Check content type
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
           throw new Error("Response is not JSON");
@@ -102,13 +127,19 @@ export default function HomePage() {
         
         const result = await response.json();
         
-        if (result.success) {
-          setCategories(result.categories || []);
+        console.log('📂 Categories result:', result);
+        
+        if (result.success && result.categories && result.categories.length > 0) {
+          console.log('✅ Categories loaded:', result.categories.length);
+          setCategories(result.categories.slice(0, 3)); // Ambil 3 kategori pertama
         } else {
-          console.error("API returned error:", result);
+          console.log('⚠️ No categories found, using fallback');
+          setCategories(FALLBACK_CATEGORIES);
         }
       } catch (error) {
-        console.error("Error fetching categories:", error);
+        console.error("❌ Error fetching categories:", error);
+        console.log('🔄 Using fallback categories');
+        setCategories(FALLBACK_CATEGORIES);
       } finally {
         setLoadingCategories(false);
       }
@@ -163,17 +194,15 @@ export default function HomePage() {
             </motion.div>
 
             {/* Large Typography */}
-            <div className="mb-16 md:mb-24">
-              <motion.h1 
-                initial={{ opacity: 0, y: 80 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                className="font-sans text-5xl md:text-7xl lg:text-8xl font-light leading-[1.1] tracking-tight text-krearte-black"
-              >
-                <span className="block">Luxury</span>
-                <span className="block font-normal mt-2">Redefined</span>
-              </motion.h1>
-            </div>
+            <motion.h1 
+              initial={{ opacity: 0, y: 80 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+              className="font-sans text-5xl md:text-7xl lg:text-8xl font-light leading-[1.1] tracking-tight text-krearte-black"
+            >
+              <span className="block">Luxury</span>
+              <span className="block font-normal mt-2">Redefined</span>
+            </motion.h1>
 
             {/* Subtitle */}
             <motion.div
@@ -270,7 +299,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== CATEGORIES SECTION (NEW) ==================== */}
+      {/* ==================== ✅ CATEGORIES SECTION (FIXED) ==================== */}
       <section className="py-40 md:py-60 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
           
@@ -292,17 +321,14 @@ export default function HomePage() {
 
           {/* Categories Grid */}
           {loadingCategories ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="animate-pulse">
                   <div className="aspect-[4/5] bg-krearte-gray-200 mb-4 rounded-lg" />
-                  <div className="h-6 bg-krearte-gray-200 w-3/4 rounded" />
+                  <div className="h-6 bg-krearte-gray-200 w-3/4 rounded mb-2" />
+                  <div className="h-4 bg-krearte-gray-200 w-full rounded" />
                 </div>
               ))}
-            </div>
-          ) : categories.length === 0 ? (
-            <div className="text-center py-24">
-              <p className="text-krearte-gray-500 font-light">No categories available</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
@@ -329,6 +355,7 @@ export default function HomePage() {
                           src={category.image_url}
                           alt={category.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-krearte-gray-100 to-krearte-gray-200">
@@ -377,7 +404,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== PRODUCTS SECTION (EXISTING) ==================== */}
+      {/* ==================== PRODUCTS SECTION ==================== */}
       <section className="py-40 md:py-60 bg-krearte-white">
         <div className="container mx-auto px-6 md:px-12">
           
@@ -443,6 +470,7 @@ export default function HomePage() {
                               src={firstImage}
                               alt={product.name}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                              loading="lazy"
                               onError={(e) => {
                                 e.currentTarget.src = '/images/placeholder.jpg';
                               }}

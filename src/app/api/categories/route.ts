@@ -7,48 +7,90 @@ export async function GET(request: Request) {
     const collectionType = searchParams.get('collectionType');
     const parentId = searchParams.get('parentId');
 
-    console.log('📦 Fetching categories with params:', { 
-      collectionType, 
-      parentId 
-    });
-
     const supabase = createAdminClient();
 
-    let query = supabase
+    // ✅ STEP 1: Fetch categories
+    let categoryQuery = supabase
       .from('categories')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true); // ✅ categories table punya is_active
 
-    // Filter by collection type if provided
     if (collectionType) {
-      query = query.eq('collection_type', collectionType);
+      categoryQuery = categoryQuery.eq('collection_type', collectionType);
     }
 
-    // Filter by parent_id (null untuk top-level categories)
     if (parentId !== null && parentId !== undefined) {
       if (parentId === 'null' || parentId === '') {
-        query = query.is('parent_id', null);
+        categoryQuery = categoryQuery.is('parent_id', null);
       } else {
-        query = query.eq('parent_id', parentId);
+        categoryQuery = categoryQuery.eq('parent_id', parentId);
       }
     }
 
-    // Order by sort_order
-    query = query.order('sort_order', { ascending: true });
+    categoryQuery = categoryQuery.order('sort_order', { ascending: true });
 
-    const {  data: categories, error } = await query;
+    const { data: categories, error: categoriesError } = await categoryQuery;
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
+    if (categoriesError) {
+      console.error('Supabase categories error:', categoriesError);
+      throw categoriesError;
     }
 
-    console.log('✅ Categories fetched:', categories?.length || 0);
+    // ✅ STEP 2: Fetch all products (TANPA filter is_active)
+    let productsQuery = supabase
+      .from('Product')
+      .select('id, slug, name, price, category_slug, collectionType');
+
+    // Filter by collectionType jika ada
+    if (collectionType) {
+      productsQuery = productsQuery.eq('collectionType', collectionType);
+    }
+
+    const { data: allProducts, error: productsError } = await productsQuery;
+
+    if (productsError) {
+      console.error('Supabase products error:', productsError);
+    }
+
+    // ✅ STEP 3: Group products by category_slug
+    const productsByCategory = new Map<string, any[]>();
+    
+    if (allProducts) {
+      for (const product of allProducts) {
+        const catSlug = product.category_slug;
+        if (catSlug) {
+          if (!productsByCategory.has(catSlug)) {
+            productsByCategory.set(catSlug, []);
+          }
+          productsByCategory.get(catSlug)!.push(product);
+        }
+      }
+    }
+
+    // ✅ STEP 4: Calculate price range per category
+    const categoriesWithPrice = categories?.map((cat: any) => {
+      const products = productsByCategory.get(cat.slug) || [];
+      
+      const prices = products
+        .filter((p: any) => p.price > 0)
+        .map((p: any) => p.price);
+
+      const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+      const maxPrice = prices.length > 0 ? Math.max(...prices) : null;
+
+      return {
+        ...cat,
+        priceRange: minPrice !== null ? { min: minPrice, max: maxPrice } : null,
+        productCount: products.length,
+      };
+    });
+
+    console.log('✅ Categories fetched:', categoriesWithPrice?.length || 0);
 
     return NextResponse.json({
       success: true,
-      categories: categories || [],
-      count: categories?.length || 0
+      categories: categoriesWithPrice || [],
+      count: categoriesWithPrice?.length || 0
     });
   } catch (error) {
     console.error('❌ Error in categories API:', error);

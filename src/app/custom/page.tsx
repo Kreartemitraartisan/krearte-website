@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -91,6 +92,7 @@ export default function CustomWithUsPage() {
   useEffect(() => {
     async function fetchDesigns() {
       try {
+        // ✅ Fetch 100 untuk rekomendasi material, tapi tampilkan cuma 6 di UI
         const response = await fetch("/api/products?limit=100");
         const result = await response.json();
         if (result.success) {
@@ -320,6 +322,9 @@ _Mohon konfirmasi ketersediaan dan harga final. Terima kasih!_
     );
   }
 
+  // ✅ Ambil cuma 6 design untuk preview
+  const previewDesigns = designs.slice(0, 6);
+
   return (
     <div className="min-h-screen bg-krearte-cream">
       {/* Back Navigation */}
@@ -367,7 +372,7 @@ _Mohon konfirmasi ketersediaan dan harga final. Terima kasih!_
                         Or skip this and tell us about your custom vision.
                       </p>
 
-                      {/* Design Grid */}
+                      {/* ✅ Preview Design Grid - Only 6 items */}
                       {loadingDesigns ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {[1,2,3].map(i => (
@@ -378,47 +383,63 @@ _Mohon konfirmasi ketersediaan dan harga final. Terima kasih!_
                             </div>
                           ))}
                         </div>
-                      ) : designs.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                          {designs.map((design) => (
-                            <button
-                              key={design.id}
-                              type="button"
-                              onClick={() => setSelectedDesign(design)}
-                              className={`p-4 border rounded-lg text-left transition-all ${
-                                selectedDesign?.id === design.id
-                                  ? "border-krearte-black bg-krearte-black text-krearte-white"
-                                  : "border-krearte-gray-200 hover:border-krearte-black"
-                              }`}
+                      ) : previewDesigns.length > 0 ? (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                            {previewDesigns.map((design) => (
+                              <button
+                                key={design.id}
+                                type="button"
+                                onClick={() => setSelectedDesign(design)}
+                                className={`p-4 border rounded-lg text-left transition-all ${
+                                  selectedDesign?.id === design.id
+                                    ? "border-krearte-black bg-krearte-black text-krearte-white"
+                                    : "border-krearte-gray-200 hover:border-krearte-black"
+                                }`}
+                              >
+                                <div className="aspect-video bg-krearte-gray-100 mb-3 rounded overflow-hidden">
+                                  {design.images && design.images.length > 0 ? (
+                                    (() => {
+                                      const thumbnailImage = design.images.find(img =>
+                                        !img.endsWith('.mp4') && !img.endsWith('.webm')
+                                      ) || design.images[0];
+                                      const isVideo = thumbnailImage.endsWith('.mp4') || thumbnailImage.endsWith('.webm');
+                                      return isVideo ? (
+                                        <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                                          <source src={thumbnailImage} type="video/mp4" />
+                                        </video>
+                                      ) : (
+                                        <img src={thumbnailImage} alt={design.name} className="w-full h-full object-cover" />
+                                      );
+                                    })()
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
+                                      <span className="text-2xl font-light">{design.name.charAt(0)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="font-normal text-sm mb-1">{design.name}</p>
+                                <p className={`text-xs ${selectedDesign?.id === design.id ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
+                                  {formatCurrency(design.price)}/m²
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* ✅ See More Designs Button */}
+                          <div className="text-center pt-4 border-t border-krearte-gray-200">
+                            <Link
+                              href="/collection/wallcovering"
+                              className="inline-flex items-center gap-2 text-sm font-medium text-krearte-black hover:text-krearte-gray-600 transition-colors"
                             >
-                              <div className="aspect-video bg-krearte-gray-100 mb-3 rounded overflow-hidden">
-                                {design.images && design.images.length > 0 ? (
-                                  (() => {
-                                    const thumbnailImage = design.images.find(img =>
-                                      !img.endsWith('.mp4') && !img.endsWith('.webm')
-                                    ) || design.images[0];
-                                    const isVideo = thumbnailImage.endsWith('.mp4') || thumbnailImage.endsWith('.webm');
-                                    return isVideo ? (
-                                      <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                                        <source src={thumbnailImage} type="video/mp4" />
-                                      </video>
-                                    ) : (
-                                      <img src={thumbnailImage} alt={design.name} className="w-full h-full object-cover" />
-                                    );
-                                  })()
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
-                                    <span className="text-2xl font-light">{design.name.charAt(0)}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <p className="font-normal text-sm mb-1">{design.name}</p>
-                              <p className={`text-xs ${selectedDesign?.id === design.id ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
-                                {formatCurrency(design.price)}/m²
-                              </p>
-                            </button>
-                          ))}
-                        </div>
+                              See More Designs
+                              <ArrowRight className="w-4 h-4" />
+                            </Link>
+                            <p className="text-xs text-krearte-gray-500 mt-2">
+                              Browse our full collection of {designs.length}+ designs
+                            </p>
+                          </div>
+                        </>
                       ) : (
                         <p className="text-sm text-krearte-gray-500 text-center py-8">
                           No designs available yet. You can still describe your custom vision below.
@@ -430,7 +451,7 @@ _Mohon konfirmasi ketersediaan dan harga final. Terima kasih!_
                         <motion.div
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="p-6 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200"
+                          className="p-6 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200 mt-6"
                         >
                           <h3 className="font-sans text-lg font-normal mb-4 flex items-center gap-2">
                             <Sparkles className="w-5 h-5 text-krearte-black" />

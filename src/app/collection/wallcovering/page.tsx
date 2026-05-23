@@ -18,22 +18,49 @@ interface Product {
   slug: string;
   description: string;
   category: string;
+  category_slug?: string;
   price: number;
   images: string[];
   sizes: ProductSize[];
   collectionType: string;
-  // ✅ TAMBAHKAN PROPERTIES INI untuk price range dari materials
   minPrice?: number;
   maxPrice?: number;
   hasMaterialPrices?: boolean;
   availableMaterialIds?: string[];
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image_url: string | null;
+  collection_type: string;
+}
+
+const FALLBACK_CATEGORIES = [
+  { id: "1", name: "Flower & Leaves", slug: "flower-leaves" },
+  { id: "2", name: "Animals", slug: "animals" },
+  { id: "3", name: "Chinoiserie", slug: "chinoiserie" },
+  { id: "4", name: "Lotus", slug: "lotus" },
+  { id: "5", name: "Jolly Wolly", slug: "jolly-wolly" },
+  { id: "6", name: "Marble", slug: "marble" },
+  { id: "7", name: "Abstract", slug: "abstract" },
+  { id: "8", name: "Geometric", slug: "geometric" },
+  { id: "9", name: "Scenery", slug: "scenery" },
+  { id: "10", name: "Toile de Jouy", slug: "toile-de-jouy" },
+  { id: "11", name: "Tropical", slug: "tropical" },
+  { id: "12", name: "Zen", slug: "zen" },
+  { id: "13", name: "Du Pavillon", slug: "du-pavillon" },
+];
+
 export default function WallcoveringCollectionPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
+  // Fetch products
   useEffect(() => {
     async function fetchProducts() {
       try {
@@ -53,25 +80,96 @@ export default function WallcoveringCollectionPage() {
     fetchProducts();
   }, []);
 
+  // Fetch categories
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const response = await fetch('/api/categories?collectionType=wallcovering&parentId=null');
+        const result = await response.json();
+        
+        if (result.success && result.categories && result.categories.length > 0) {
+          setCategories(result.categories);
+        } else {
+          setCategories(FALLBACK_CATEGORIES as Category[]);
+        }
+      } catch (error) {
+        console.error("Error fetching categories:", error);
+        setCategories(FALLBACK_CATEGORIES as Category[]);
+      }
+    }
+
+    fetchCategories();
+  }, []);
+
+  // ✅ Helper to get product count per category
+  const getProductCount = (categorySlug: string) => {
+    return products.filter(p => 
+      p.category === categorySlug || p.category_slug === categorySlug
+    ).length;
+  };
+
   const filteredProducts = products.filter(product => {
     if (filter === "all") return true;
-    if (filter === "video") return product.images.some(img => img.endsWith('.mp4') || img.endsWith('.webm'));
-    if (filter === "image") return !product.images.some(img => img.endsWith('.mp4') || img.endsWith('.webm'));
-    return true;
+    if (filter === "video") return product.images?.some(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
+    if (filter === "image") return !product.images?.some(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
+    return product.category === filter || product.category_slug === filter;
   });
 
-  // ✅ Helper function to get primary media (video priority)
-  const getPrimaryMedia = (images: string[]) => {
-    if (!images || images.length === 0) return null;
+  // ✅ ROBUST getPrimaryMedia function dengan debugging
+  const getPrimaryMedia = (images: any) => {
+    // Handle null/undefined
+    if (!images) {
+      return null;
+    }
+
+    // Handle jika images adalah string JSON
+    let imgArray: string[] = [];
     
-    // ✅ Prioritize video over images
-    const firstVideo = images.find(img => img.endsWith('.mp4') || img.endsWith('.webm'));
-    const firstImage = images.find(img => !img.endsWith('.mp4') && !img.endsWith('.webm'));
+    if (typeof images === 'string') {
+      try {
+        imgArray = JSON.parse(images);
+      } catch {
+        // Jika gagal parse, coba anggap sebagai single URL
+        imgArray = [images];
+      }
+    } else if (Array.isArray(images)) {
+      imgArray = images;
+    } else {
+      return null;
+    }
+
+    if (!imgArray || imgArray.length === 0) {
+      return null;
+    }
+
+    // Filter hanya string yang valid
+    const validImages = imgArray.filter(img => typeof img === 'string' && img.trim() !== '');
     
+    if (validImages.length === 0) {
+      return null;
+    }
+
+    // Cari video dan gambar
+    const firstVideo = validImages.find(img => 
+      img.endsWith('.mp4') || img.endsWith('.webm') || img.endsWith('.ogg')
+    );
+    
+    const firstImage = validImages.find(img => 
+      !img.endsWith('.mp4') && !img.endsWith('.webm') && !img.endsWith('.ogg')
+    );
+
     return {
       type: firstVideo ? 'video' : 'image',
       src: firstVideo || firstImage || null
     };
+  };
+
+  const handleFilterChange = (value: string) => {
+    if (value !== "all" && value !== "video" && value !== "image") {
+      window.location.href = `/collection/wallcovering/${value}`;
+    } else {
+      setFilter(value);
+    }
   };
 
   if (loading) {
@@ -102,20 +200,43 @@ export default function WallcoveringCollectionPage() {
         {/* Filter Bar */}
         <div className="flex items-center justify-between mb-8">
           <p className="text-krearte-gray-600 font-light">
-            {filteredProducts.length} products
+            {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
           </p>
           
-          <div className="flex items-center gap-4">
+          <div className="relative">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-krearte-gray-400" />
+              
               <select
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="px-4 py-2 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light bg-white"
+                onChange={(e) => handleFilterChange(e.target.value)}
+                className="px-4 py-2 pr-10 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light bg-white appearance-none cursor-pointer hover:border-krearte-gray-300 transition-colors"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: "right 0.5rem center",
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "1.5em 1.5em",
+                }}
               >
                 <option value="all">All Products</option>
                 <option value="video">With Video</option>
                 <option value="image">Image Only</option>
+                
+                {categories.length > 0 && (
+                  <option disabled>──────────</option>
+                )}
+                
+                {categories.map((category) => {
+                  const count = getProductCount(category.slug);
+                  return (
+                    <option 
+                      key={category.id} 
+                      value={category.slug}
+                    >
+                      {category.name} ({count})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -129,14 +250,19 @@ export default function WallcoveringCollectionPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredProducts.map((product) => {
+              // ✅ DEBUG LOG - HAPUS SETELAH GAMBAR MUNCUL
+              console.log('🔍 Product:', product.name);
+              console.log('🖼️ Images array:', product.images);
+              
               const media = getPrimaryMedia(product.images);
+              console.log('🎬 Media result:', media);
+              console.log('---');
               
               return (
                 <div
                   key={product.id}
                   className="group bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  {/* Product Media - Video priority */}
                   <Link href={`/product/${product.slug}`} className="block">
                     <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
                       {media?.src && media?.type === 'video' ? (
@@ -147,12 +273,20 @@ export default function WallcoveringCollectionPage() {
                           muted
                           loop
                           playsInline
+                          onError={(e) => {
+                            console.error('❌ Video failed to load:', media.src);
+                          }}
                         />
                       ) : media?.src ? (
                         <img
                           src={media.src}
                           alt={product.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          loading="lazy"
+                          onError={(e) => {
+                            console.error('❌ Image failed to load:', media.src);
+                            e.currentTarget.src = '/images/placeholder.jpg';
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
@@ -162,7 +296,6 @@ export default function WallcoveringCollectionPage() {
                     </div>
                   </Link>
 
-                  {/* Product Info */}
                   <div className="p-6">
                     <Link href={`/product/${product.slug}`}>
                       <h3 className="font-sans text-lg font-normal mb-2 group-hover:underline decoration-krearte-gray-300 underline-offset-4">
@@ -177,7 +310,6 @@ export default function WallcoveringCollectionPage() {
                     )}
                     
                     <div className="flex items-center justify-between">
-                      {/* ✅ Display price range from materials (exclude services) */}
                       <p className="text-krearte-black font-normal">
                         {product.hasMaterialPrices && product.minPrice !== undefined ? (
                           <>
