@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { formatCurrency } from '@/lib/utils';
 
-export const dynamic = 'force-dynamic'; // ✅ Mencegah cache stale data di development
+export const dynamic = 'force-dynamic';
 
 interface Product {
   id: string;
@@ -37,6 +37,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   console.log('🔍 Fetching category:', { collectionSlug, categorySlug });
 
+  // Fetch category
   const { data: category, error: categoryError } = await supabase
     .from('categories')
     .select('*')
@@ -52,15 +53,16 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   console.log('✅ Category found:', category.name);
 
+  // ✅ FIX: Gunakan .ilike() untuk case-insensitive match
   console.log('🔍 Fetching products for category_slug:', categorySlug);
   const { data: productsData, error: productsError } = await supabase
     .from('Product')
     .select('id, name, slug, description, price, images, category_slug')
-    .eq('category_slug', categorySlug)
+    .ilike('category_slug', categorySlug) // ✅ Case-insensitive
     .order('createdAt', { ascending: false });
 
   console.log('📦 Raw products response:', { 
-    count: productsData?.length, 
+    count: productsData?.length || 0, 
     error: productsError,
     firstProduct: productsData?.[0] 
   });
@@ -70,13 +72,13 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   }
 
   const products: Product[] = (productsData as Product[] | null) || [];
-
   console.log('✅ Processed products count:', products.length);
 
+  // ✅ Jika produk tetap 0, kemungkinan besar masalah RLS
   if (products.length === 0) {
     return (
-      <div className="min-h-screen bg-krearte-cream flex flex-col items-center justify-center py-20">
-        <div className="container mx-auto px-6 md:px-12">
+      <div className="min-h-screen bg-krearte-cream">
+        <div className="container mx-auto px-6 md:px-12 py-6">
           <nav className="text-sm text-krearte-gray-600 mb-12">
             <Link href="/" className="hover:text-krearte-black">Home</Link>
             <span className="mx-2">/</span>
@@ -86,14 +88,30 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             <span className="mx-2">/</span>
             <span className="text-krearte-black font-medium">{category.name}</span>
           </nav>
+          
           <h1 className="font-sans text-4xl md:text-5xl font-light mb-4">{category.name}</h1>
           {category.description && (
             <p className="text-krearte-gray-600 font-light text-lg max-w-3xl mb-8">{category.description}</p>
           )}
-          <div className="text-center py-20">
-            <p className="text-krearte-gray-500 font-light text-lg mb-4">No products in this category yet.</p>
-            <p className="text-krearte-gray-400 text-sm">
-              Check terminal logs for debug info, or add products with category_slug: <code className="bg-krearte-gray-100 px-2 py-1 rounded">{categorySlug}</code>
+          
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
+            <h3 className="font-medium text-yellow-800 mb-2">⚠️ No Products Found</h3>
+            <p className="text-sm text-yellow-700 mb-2">
+              Database query returned 0 products. This is likely a <strong>Row Level Security (RLS)</strong> issue.
+            </p>
+            <p className="text-sm text-yellow-700 mb-4">
+              Run this SQL in Supabase SQL Editor:
+            </p>
+            <code className="block bg-white p-3 rounded text-xs overflow-x-auto">
+              CREATE POLICY "Allow public read access on Product"<br/>
+              ON "Product" FOR SELECT<br/>
+              USING (true);
+            </code>
+          </div>
+          
+          <div className="text-center py-10">
+            <p className="text-krearte-gray-500 font-light">
+              Category slug: <code className="bg-krearte-gray-100 px-2 py-1 rounded">{categorySlug}</code>
             </p>
           </div>
         </div>
@@ -186,11 +204,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               );
             })}
           </div>
-        ) : (
-          products.length === 1 && (
-            <p className="text-krearte-gray-400 text-sm italic">This is the only product in this category.</p>
-          )
-        )}
+        ) : products.length === 1 ? (
+          <p className="text-krearte-gray-400 text-sm italic text-center">This is the only product in this category.</p>
+        ) : null}
       </div>
     </div>
   );
