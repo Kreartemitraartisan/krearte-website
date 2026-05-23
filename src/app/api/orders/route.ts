@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET: Fetch orders (user's own orders or all for admin)
 export async function GET(request: Request) {
   try {
