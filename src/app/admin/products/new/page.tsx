@@ -138,7 +138,7 @@ export default function NewProductPage() {
         const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
           headers: {
-            'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDt'
+            'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDtFj0yXcUO5QkJ'
           },
           body: formData,
         });
