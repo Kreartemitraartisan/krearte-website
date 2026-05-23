@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 
+// ================= INTERFACES =================
 interface ProductSize {
   id: string;
   label: string;
@@ -38,7 +39,7 @@ interface Category {
   parent_id: string | null;
 }
 
-// ✅ Fallback categories dengan data yang benar
+// ================= CONSTANTS =================
 const FALLBACK_CATEGORIES: Category[] = [
   {
     id: "1",
@@ -69,7 +70,7 @@ const FALLBACK_CATEGORIES: Category[] = [
   },
 ];
 
-// ⏰ SHUFFLE INTERVAL (dalam milliseconds) - 15 menit
+// Shuffle setiap 15 menit
 const SHUFFLE_INTERVAL = 15 * 60 * 1000;
 
 export default function HomePage() {
@@ -85,14 +86,15 @@ export default function HomePage() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoryImageIndex, setCategoryImageIndex] = useState<Record<string, number>>({});
   
-  // Ref untuk track apakah shuffle sudah di-init
+  // Ref untuk mencegah infinite loop pada shuffle
   const shuffleInitialized = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch products
+  // 1. Fetch Products
   useEffect(() => {
     async function fetchProducts() {
       try {
+        // Limit 12 aman untuk production
         const response = await fetch("/api/products?limit=12");
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
@@ -108,7 +110,7 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
-  // Fetch categories
+  // 2. Fetch Categories
   useEffect(() => {
     async function fetchCategories() {
       try {
@@ -130,15 +132,14 @@ export default function HomePage() {
     fetchCategories();
   }, []);
 
-  // ✅ FIX: Shuffle effect yang TIDAK menyebabkan infinite loop
+  // 3. Shuffle Logic (Hanya jalan sekali saat mount)
   useEffect(() => {
-    // Jangan jalankan jika sudah di-init atau data belum ready
+    // Guard clause: Jangan jalan jika sudah di-init atau data belum siap
     if (shuffleInitialized.current) return;
     if (categories.length === 0 || featuredProducts.length === 0) return;
     
     shuffleInitialized.current = true;
 
-    // Fungsi shuffle
     const performShuffle = () => {
       const newIndex: Record<string, number> = {};
       
@@ -148,29 +149,29 @@ export default function HomePage() {
         );
         
         if (categoryProducts.length > 0) {
+          // Pilih index produk secara random
           newIndex[category.id] = Math.floor(Math.random() * categoryProducts.length);
         }
       });
       
-      // Update state
       setCategoryImageIndex(newIndex);
     };
 
-    // Shuffle pertama kali
+    // Jalankan shuffle pertama kali
     performShuffle();
 
-    // Set interval
+    // Set interval untuk shuffle selanjutnya
     intervalRef.current = setInterval(performShuffle, SHUFFLE_INTERVAL);
 
-    // Cleanup
+    // Cleanup saat component unmount
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, []); // ✅ DEPENDENCIES KOSONG - hanya jalan sekali saat mount
+  }, []); // DEPENDENCIES KOSONG [] agar tidak looping
 
-  // Helper function
+  // Helper untuk mengambil gambar kategori
   const getCategoryHeroImage = useCallback((category: Category) => {
     const categoryProducts = featuredProducts.filter(
       p => p.category_slug === category.slug || p.category === category.slug
@@ -381,6 +382,7 @@ export default function HomePage() {
                           alt={category.name}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           loading="lazy"
+                          // ✅ TIDAK ADA onError DI SINI (Mencegah loop 404)
                         />
                       ) : (
                         <div className="absolute inset-0 bg-krearte-gray-100 flex items-center justify-center">
@@ -500,6 +502,7 @@ export default function HomePage() {
                               alt={product.name}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                               loading="lazy"
+                              // ✅ TIDAK ADA onError DI SINI (Mencegah loop 404)
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
