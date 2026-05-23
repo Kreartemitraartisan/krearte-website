@@ -16,6 +16,15 @@ interface Material {
   description: string | null;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image_url: string | null;
+  collection_type: string;
+}
+
 interface Product {
   id: string;
   name: string;
@@ -29,6 +38,7 @@ interface Product {
   recommendedMaterialIds: string[];
   collectionType?: string;
   is25DEligible?: boolean;
+  category_slug?: string;
 }
 
 export default function EditProductPage() {
@@ -39,13 +49,16 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingMaterials, setLoadingMaterials] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
     category: "wallcovering",
+    category_slug: "", // ✅ NEW: category slug for new system
     collectionType: "wallcovering",
     is25DEligible: false,
     price: 0,
@@ -67,7 +80,6 @@ export default function EditProductPage() {
            m.pricePerM2 > 0;
   };
 
-  // ✅ NEW: Filter out sample items (karena sudah ada tombol Order Sample di product page)
   const isSampleItem = (m: Material) => {
     const name = m.name?.toLowerCase() || '';
     const cat = m.category?.toLowerCase() || '';
@@ -75,26 +87,29 @@ export default function EditProductPage() {
   };
 
   const isServiceOrAddon = (m: Material) => {
-    return !isPhysicalMaterial(m) && !isSampleItem(m); // ✅ Exclude samples
+    return !isPhysicalMaterial(m) && !isSampleItem(m);
   };
 
-  // ✅ Fetch Product & Materials
+  // ✅ Fetch Product, Materials & Categories
   useEffect(() => {
     async function fetchData() {
       try {
-        const [productRes, materialsRes] = await Promise.all([
+        const [productRes, materialsRes, categoriesRes] = await Promise.all([
           fetch(`/api/admin/products/${productId}`),
           fetch("/api/materials"),
+          fetch("/api/categories?collectionType=wallcovering"), // ✅ Fetch categories
         ]);
 
         const productData = await productRes.json();
         const materialsData = await materialsRes.json();
+        const categoriesData = await categoriesRes.json();
 
         if (productData.success) {
           setFormData({
             name: productData.product.name || "",
             slug: productData.product.slug || "",
             category: productData.product.category || "wallcovering",
+            category_slug: productData.product.category_slug || "", // ✅ Load existing category_slug
             collectionType: productData.product.collectionType || "wallcovering",
             is25DEligible: productData.product.is25DEligible || false,
             price: productData.product.price || 0,
@@ -108,12 +123,18 @@ export default function EditProductPage() {
 
         setMaterials(materialsData.materials || []);
         
+        // ✅ Set categories
+        if (categoriesData.success) {
+          setCategories(categoriesData.categories || []);
+        }
+        
       } catch (error) {
         console.error("❌ Error fetching data:", error);
         alert("Failed to load product");
       } finally {
         setLoading(false);
         setLoadingMaterials(false);
+        setLoadingCategories(false);
       }
     }
 
@@ -248,7 +269,7 @@ export default function EditProductPage() {
       const response = await fetch(`/api/admin/products/${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(formData), // ✅ formData sudah include category_slug
       });
 
       const result = await response.json();
@@ -269,7 +290,7 @@ export default function EditProductPage() {
 
   // ✅ Filter materials untuk display
   const physicalMaterials = materials.filter(isPhysicalMaterial);
-  const services = materials.filter(isServiceOrAddon); // ✅ Sudah exclude samples
+  const services = materials.filter(isServiceOrAddon);
 
   const materialsByCategory = physicalMaterials.reduce((acc, material) => {
     const category = material.category || 'Other';
@@ -336,7 +357,7 @@ export default function EditProductPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-normal mb-2">Category *</label>
+              <label className="block text-sm font-normal mb-2">Category (Legacy) *</label>
               <select
                 name="category"
                 value={formData.category}
@@ -347,6 +368,35 @@ export default function EditProductPage() {
                 <option value="designer">Designer Collection</option>
                 <option value="material">Material</option>
               </select>
+            </div>
+
+            {/* ✅ NEW: Category Slug Dropdown */}
+            <div>
+              <label className="block text-sm font-normal mb-2">
+                Collection Category
+                <span className="text-krearte-gray-400 font-light ml-1">(Optional)</span>
+              </label>
+              <select
+                name="category_slug"
+                value={formData.category_slug || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black bg-white"
+                disabled={loadingCategories}
+              >
+                <option value="">Select a category...</option>
+                {loadingCategories ? (
+                  <option disabled>Loading categories...</option>
+                ) : (
+                  categories.map((cat) => (
+                    <option key={cat.id} value={cat.slug}>
+                      {cat.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <p className="text-xs text-krearte-gray-500 mt-1">
+                Used for filtering in collection pages (e.g., /collection/wallcovering/flower-leaves)
+              </p>
             </div>
 
             <div>
@@ -655,7 +705,7 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        {/* ✅ Services / Add-Ons Section - EXCLUDE SAMPLES */}
+        {/* Services / Add-Ons Section */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
             Available Services / Add-Ons
