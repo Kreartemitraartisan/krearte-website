@@ -43,11 +43,10 @@ export async function POST(request: Request) {
 
     // Save to database
     const galleryItem = await prisma.gallery.create({
-       {
+      data: {
         title,
         imageUrl: `/gallery/${filename}`,
         category,
-        description: description || null,
       },
     });
 

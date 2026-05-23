@@ -47,11 +47,10 @@ export async function PATCH(
 
     const order = await prisma.order.update({
       where: { id },
-       {
+      data: {
         status: body.status,
         paymentStatus: body.paymentStatus,
       },
-      include: { items: true },
     });
 
     // 🔄 Send webhook to n8n if status changed
