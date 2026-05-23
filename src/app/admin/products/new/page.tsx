@@ -42,7 +42,7 @@ export default function NewProductPage() {
 
   const [images, setImages] = useState<string[]>([]);
 
-  // ✅ Fetch ALL materials (termasuk services/add-ons), filter nanti di UI
+  // ✅ Fetch ALL materials
   useEffect(() => {
     async function fetchMaterials() {
       try {
@@ -107,10 +107,13 @@ export default function NewProductPage() {
     }
   };
 
-  // ✅ UPDATED: Upload ke Supabase, tapi URL dikonversi ke assets.krearte.id
+  // ✅ FIXED: Upload ke VPS dengan debug log & validasi MIME type
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      console.error("❌ No file selected");
+      return;
+    }
 
     setUploading(true);
     setUploadProgress(0);
@@ -119,6 +122,14 @@ export default function NewProductPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
+        // Debug log
+        console.log(`📁 Uploading ${type}:`, {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified
+        });
+
         const isVideo = type === "video";
         const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
         
@@ -126,18 +137,38 @@ export default function NewProductPage() {
           throw new Error(`File too large. Max ${isVideo ? "100MB" : "20MB"}`);
         }
 
+        // ✅ Validasi MIME type untuk video
+        if (isVideo) {
+          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
+          if (!allowedVideoTypes.includes(file.type)) {
+            throw new Error(`Invalid video format. Allowed: ${allowedVideoTypes.join(', ')}`);
+          }
+        } else {
+          const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+          if (!allowedImageTypes.includes(file.type)) {
+            throw new Error(`Invalid image format. Allowed: ${allowedImageTypes.join(', ')}`);
+          }
+        }
+
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => Math.min(prev + 10, 90));
         }, 200);
 
-        // ✅ Upload ke VPS
+        // ✅ Build FormData dengan field name yang benar
         const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', type);
+        formData.append('file', file);        // ✅ Field name: 'file' (harus sama dengan backend)
+        formData.append('type', type);        // ✅ Field name: 'type' (image/video)
+
+        console.log("📤 Sending to upload server...", {
+          url: 'https://assets.krearte.id/api/upload',
+          method: 'POST',
+          fields: ['file', 'type']
+        });
 
         const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
           headers: {
+            // ✅ JANGAN set Content-Type untuk FormData! Browser akan set otomatis dengan boundary
             'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDtFj0yXcUO5QkJ'
           },
           body: formData,
@@ -146,48 +177,57 @@ export default function NewProductPage() {
         clearInterval(progressInterval);
         setUploadProgress(100);
 
+        console.log("📥 Response status:", response.status, response.statusText);
+
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Upload failed');
+          const errorText = await response.text();
+          console.error("❌ Upload failed:", {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText
+          });
+          throw new Error(`Upload failed: ${response.status} - ${errorText || response.statusText}`);
         }
 
         const result = await response.json();
+        console.log("✅ Upload success:", result);
+        
         setImages(prev => [...prev, result.url]);
         
         setTimeout(() => setUploadProgress(0), 500);
       }
     } catch (err: any) {
-      console.error("Upload error:", err);
+      console.error("❌ Upload error:", err);
       setError(err.message || "Failed to upload media");
       alert(`❌ ${err.message || "Upload failed!"}`);
     } finally {
       setUploading(false);
-      e.target.value = "";
+      e.target.value = ""; // Reset input agar bisa upload file yang sama lagi
     }
   };
 
-    const removeImage = (index: number) => {
-      setImages(prev => prev.filter((_, i) => i !== index));
-    };
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
 
-    const toggleAvailableMaterial = (materialId: string) => {
-      setFormData(prev => {
-        const isAlreadyAvailable = prev.availableMaterialIds.includes(materialId);
-        
-        if (isAlreadyAvailable) {
-          return {
-            ...prev,
-            availableMaterialIds: prev.availableMaterialIds.filter(id => id !== materialId),
-            recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
-          };
-        } else {
-          return {
-            ...prev,
-            availableMaterialIds: [...prev.availableMaterialIds, materialId]
-          };
-        }
-      });
-    };
+  const toggleAvailableMaterial = (materialId: string) => {
+    setFormData(prev => {
+      const isAlreadyAvailable = prev.availableMaterialIds.includes(materialId);
+      
+      if (isAlreadyAvailable) {
+        return {
+          ...prev,
+          availableMaterialIds: prev.availableMaterialIds.filter(id => id !== materialId),
+          recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
+        };
+      } else {
+        return {
+          ...prev,
+          availableMaterialIds: [...prev.availableMaterialIds, materialId]
+        };
+      }
+    });
+  };
 
   const toggleRecommendedMaterial = (materialId: string) => {
     if (!formData.availableMaterialIds.includes(materialId)) {
@@ -338,7 +378,6 @@ export default function NewProductPage() {
               </p>
             </div>
 
-            {/* ✅ Category dengan lebih banyak pilihan */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">
                 Category *
@@ -511,7 +550,7 @@ export default function NewProductPage() {
             <div className="border-2 border-dashed border-krearte-gray-300 rounded-lg p-6 text-center">
               <input
                 type="file"
-                accept="video/mp4,video/webm,video/quicktime"
+                accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
                 multiple
                 onChange={(e) => handleMediaUpload(e, "video")}
                 disabled={uploading}
@@ -530,7 +569,7 @@ export default function NewProductPage() {
                 {uploading ? `Uploading... ${uploadProgress}%` : "Upload Videos"}
               </label>
               <p className="text-sm text-krearte-gray-500 mt-2">
-                MP4, WebM, MOV up to 100MB
+                MP4, WebM, MOV, M4V up to 100MB
               </p>
             </div>
           </div>
@@ -539,7 +578,7 @@ export default function NewProductPage() {
           {images.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               {images.map((media, index) => {
-                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov');
+                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov') || media.endsWith('.m4v');
                 
                 return (
                   <div key={index} className="relative aspect-square bg-krearte-gray-100 rounded-lg overflow-hidden group">
@@ -587,7 +626,7 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Available Materials - PHYSICAL ONLY (no badge) */}
+        {/* Available Materials - PHYSICAL ONLY */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2">Available Materials</h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">
@@ -630,7 +669,6 @@ export default function NewProductPage() {
                             : "border-krearte-gray-200 hover:border-krearte-black"
                         }`}
                       >
-                        {/* ✅ Removed PHYSICAL badge, cleaner layout */}
                         <p className="font-normal text-sm">{material.name}</p>
                         <p className={`text-xs mt-1 ${
                           formData.availableMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
@@ -748,7 +786,7 @@ export default function NewProductPage() {
           </div>
         )}
 
-        {/* Services / Add-Ons Section - SEPARATE */}
+        {/* Services / Add-Ons Section */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6 mt-6">
           <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
             Available Services / Add-Ons
