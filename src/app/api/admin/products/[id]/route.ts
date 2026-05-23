@@ -166,7 +166,7 @@ export async function PUT(
 }
 
 // =========================
-// ✅ DELETE - Delete product (FIXED WITH CASCADE)
+// ✅ DELETE - Delete product (FIXED - Only valid relations)
 // =========================
 export async function DELETE(
   request: NextRequest,
@@ -201,15 +201,13 @@ export async function DELETE(
     // ✅ FIX: Await params untuk Next.js 15+
     const { id } = await context.params;
 
-    // ✅ 1. Cek apakah product ada
+    // ✅ 1. Cek apakah product ada (HANYA include relasi yang ADA di schema)
     const product = await prisma.product.findUnique({
       where: { id },
       include: { 
-        orderItems: true,
-        // Include related tables untuk cascade delete manual jika perlu
-        productImages: true,
-        productMaterials: true,
-        recommendedMaterials: true,
+        orderItems: true,  // ✅ Valid - ada di schema
+        sizes: true,       // ✅ Valid - ada di schema
+        wishlists: true,   // ✅ Valid - ada di schema
       },
     });
 
@@ -231,26 +229,18 @@ export async function DELETE(
       );
     }
 
-    // ✅ 3. CASCADE DELETE: Hapus data terkait dulu sebelum hapus produk
-    // (Ini mencegah error "Foreign key constraint")
+    // ✅ 3. CASCADE DELETE MANUAL (hanya untuk relasi yang ada di schema):
     
-    // Hapus semua gambar produk
-    if (product.productImages && product.productImages.length > 0) {
-      await prisma.productImage.deleteMany({
+    // Hapus semua sizes terkait (Prisma schema sudah Cascade, tapi kita hapus manual untuk safety)
+    if (product.sizes && product.sizes.length > 0) {
+      await prisma.productSize.deleteMany({
         where: { productId: id }
       });
     }
     
-    // Hapus relasi available materials
-    if (product.productMaterials && product.productMaterials.length > 0) {
-      await prisma.productMaterial.deleteMany({
-        where: { productId: id }
-      });
-    }
-    
-    // Hapus relasi recommended materials
-    if (product.recommendedMaterials && product.recommendedMaterials.length > 0) {
-      await prisma.productRecommendedMaterial.deleteMany({
+    // Hapus semua wishlists terkait
+    if (product.wishlists && product.wishlists.length > 0) {
+      await prisma.wishlist.deleteMany({
         where: { productId: id }
       });
     }
