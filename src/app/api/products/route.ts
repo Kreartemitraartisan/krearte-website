@@ -1,10 +1,13 @@
+// app/api/products/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// GET - Fetch products (public endpoint)
+// =========================
+// ✅ GET - Fetch products (Public Endpoint)
+// =========================
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -35,8 +38,9 @@ export async function GET(request: Request) {
     }
 
     if (collectionType) {
+      // ✅ FIX: Jangan toLowerCase() di sini, biarkan Prisma handle case-insensitive
       where.collectionType = {
-        equals: collectionType.toLowerCase(),
+        equals: collectionType,
         mode: "insensitive",
       };
     }
@@ -45,7 +49,7 @@ export async function GET(request: Request) {
       where.slug = slug;
     }
 
-    // ✅ FETCH PRODUCTS from Prisma
+    // ✅ STEP 1: Fetch products dasar dulu
     const products = await prisma.product.findMany({
       where,
       include: {
@@ -66,80 +70,45 @@ export async function GET(request: Request) {
       });
     }
 
-    // ✅ Process each product to add computed priceRange
-    const productsWithPrices = await Promise.all(
-      products.map(async (product) => {
-        try {
-          const materialIds = product.availableMaterialIds || [];
+    // ✅ STEP 2: Fetch ALL materials yang dibutuhkan SEKALIGUS (Anti N+1 Query)
+    // Ambil semua unique materialIds dari semua produk
+    const allMaterialIds = [
+      ...new Set(
+        products
+          .flatMap((p) => p.availableMaterialIds || [])
+          .filter((id): id is string => !!id)
+      ),
+    ];
 
-          // If no materials, use base price
-          if (!materialIds || materialIds.length === 0) {
-            return {
-              ...product,
-              priceRange: {
-                min: product.price || 0,
-                max: product.price || 0,
-              },
-              hasMaterialPrices: false,
-            };
-          }
+    let materialsMap = new Map<string, any>();
+    
+    if (allMaterialIds.length > 0) {
+      const allMaterials = await prisma.material.findMany({
+        where: {
+          id: { in: allMaterialIds },
+        },
+        select: {
+          id: true,
+          pricePerM2: true,
+          category: true,
+          name: true,
+          waste: true,
+        },
+      });
+      
+      // Map materials by ID for fast lookup
+      allMaterials.forEach((m) => {
+        materialsMap.set(m.id, m);
+      });
+    }
 
-          // Fetch materials for price calculation
-          const materials = await prisma.material.findMany({
-            where: {
-              id: { in: materialIds },
-            },
-            select: {
-              pricePerM2: true,
-              category: true,
-              name: true,
-              waste: true,
-            },
-          });
+    // ✅ STEP 3: Process products dengan material prices (dari Map, bukan query DB lagi)
+    const productsWithPrices = products.map((product) => {
+      try {
+        const materialIds = product.availableMaterialIds || [];
 
-          // Filter out service/jasa materials
-          const actualMaterials = (materials || []).filter((m) => {
-            const cat = (m.category || "").toLowerCase();
-            const name = (m.name || "").toLowerCase();
-
-            if (cat === "service") return false;
-            if (name.includes("jasa")) return false;
-            if (name.includes("design/re-draw")) return false;
-            if (name.startsWith("jasa print")) return false;
-            if (name.includes("print -")) return false;
-
-            return true;
-          });
-
-          // If no valid materials, fallback to base price
-          if (actualMaterials.length === 0) {
-            return {
-              ...product,
-              priceRange: {
-                min: product.price || 0,
-                max: product.price || 0,
-              },
-              hasMaterialPrices: false,
-            };
-          }
-
-          // Calculate price range from materials
-          const prices = actualMaterials.map(
-            (m) => (m.pricePerM2 || 0) + (m.waste || 0)
-          );
-
-          const min = Math.min(...prices);
-          const max = Math.max(...prices);
-
-          return {
-            ...product,
-            price: min, // Use min as display price
-            priceRange: { min, max },
-            hasMaterialPrices: true,
-          };
-        } catch (err) {
-          // Fallback per product if material fetch fails
-          console.warn(`⚠️ Failed to process materials for product ${product.id}`);
+        // If no materials, use base price
+        if (!materialIds || materialIds.length === 0) {
           return {
             ...product,
             priceRange: {
@@ -149,14 +118,72 @@ export async function GET(request: Request) {
             hasMaterialPrices: false,
           };
         }
-      })
-    );
+
+        // Get materials from Map (no DB query!)
+        const materials = materialIds
+          .map((id) => materialsMap.get(id))
+          .filter((m): m is NonNullable<typeof m> => !!m);
+
+        // Filter out service/jasa materials
+        const actualMaterials = materials.filter((m) => {
+          const cat = (m.category || "").toLowerCase();
+          const name = (m.name || "").toLowerCase();
+
+          if (cat === "service") return false;
+          if (name.includes("jasa")) return false;
+          if (name.includes("design/re-draw")) return false;
+          if (name.startsWith("jasa print")) return false;
+          if (name.includes("print -")) return false;
+
+          return true;
+        });
+
+        // If no valid materials, fallback to base price
+        if (actualMaterials.length === 0) {
+          return {
+            ...product,
+            priceRange: {
+              min: product.price || 0,
+              max: product.price || 0,
+            },
+            hasMaterialPrices: false,
+          };
+        }
+
+        // Calculate price range from materials
+        const prices = actualMaterials.map(
+          (m) => (m.pricePerM2 || 0) + (m.waste || 0)
+        );
+
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+
+        return {
+          ...product,
+          price: min, // Use min as display price
+          priceRange: { min, max },
+          hasMaterialPrices: true,
+        };
+      } catch (err) {
+        // Fallback per product if processing fails
+        console.warn(`⚠️ Failed to process prices for product ${product.id}:`, err);
+        return {
+          ...product,
+          priceRange: {
+            min: product.price || 0,
+            max: product.price || 0,
+          },
+          hasMaterialPrices: false,
+        };
+      }
+    });
 
     return NextResponse.json({
       success: true,
       products: productsWithPrices,
       count: productsWithPrices.length,
     });
+
   } catch (error) {
     console.error("❌ Error fetching products:", error);
 
@@ -170,16 +197,26 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Create product (Admin only)
+// =========================
+// ✅ POST - Create product (Admin only)
+// =========================
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    // Validasi input wajib
+    if (!body.name || !body.slug) {
+      return NextResponse.json(
+        { success: false, error: "Name and slug are required" },
+        { status: 400 }
+      );
+    }
 
     const product = await prisma.product.create({
       data: {
         name: body.name,
         slug: body.slug,
-        category: body.category,
+        category: body.category || "wallcovering",
         price: body.price || 0,
         description: body.description || "",
         images: body.images || [],
@@ -193,8 +230,8 @@ export async function POST(request: Request) {
           create:
             body.sizes?.map((size: any) => ({
               label: size.label,
-              price: size.price || 0,
-              stock: size.stock || 0,
+              price: Number(size.price) || 0,
+              stock: Number(size.stock) || 0,
             })) || [],
         },
       },
@@ -205,8 +242,16 @@ export async function POST(request: Request) {
       success: true,
       product,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error creating product:", error);
+
+    // Handle duplicate slug
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        { success: false, error: "Slug already exists. Please use a unique slug." },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -218,7 +263,9 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT - Update product (Admin only)
+// =========================
+// ✅ PUT - Update product (Admin only)
+// =========================
 export async function PUT(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -239,22 +286,22 @@ export async function PUT(request: Request) {
         name: body.name,
         slug: body.slug,
         category: body.category,
-        price: body.price,
+        price: typeof body.price === 'number' ? body.price : 0,
         description: body.description,
         images: body.images,
         availableMaterialIds: body.availableMaterialIds,
         recommendedMaterialIds: body.recommendedMaterialIds,
         collectionType: body.collectionType,
         is25DEligible: body.is25DEligible,
-        stock: body.stock,
+        stock: typeof body.stock === 'number' ? body.stock : 0,
         category_slug: body.category_slug,
         sizes: body.sizes
           ? {
               deleteMany: {},
               create: body.sizes.map((size: any) => ({
                 label: size.label,
-                price: size.price,
-                stock: size.stock,
+                price: Number(size.price) || 0,
+                stock: Number(size.stock) || 0,
               })),
             }
           : undefined,
@@ -266,8 +313,22 @@ export async function PUT(request: Request) {
       success: true,
       product,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error updating product:", error);
+
+    if (error?.code === "P2002") {
+      return NextResponse.json(
+        { success: false, error: "Slug already exists" },
+        { status: 400 }
+      );
+    }
+
+    if (error?.code === "P2025") {
+      return NextResponse.json(
+        { success: false, error: "Product not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -279,7 +340,9 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE - Delete product (Admin only)
+// =========================
+// ✅ DELETE - Delete product (Admin only)
+// =========================
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -292,6 +355,27 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // Cek dulu apakah produk punya order items (jangan hapus kalau sudah ada yang beli)
+    const orderCount = await prisma.orderItem.count({
+      where: { productId: id },
+    });
+
+    if (orderCount > 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Cannot delete product that has been ordered. Please archive it instead." 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Hapus sizes terkait dulu (cascade manual)
+    await prisma.productSize.deleteMany({
+      where: { productId: id },
+    });
+
+    // Hapus product
     await prisma.product.delete({
       where: { id },
     });
@@ -300,8 +384,22 @@ export async function DELETE(request: Request) {
       success: true,
       message: "Product deleted successfully",
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error deleting product:", error);
+
+    if (error?.code === "P2025") {
+      return NextResponse.json(
+        { success: false, error: "Product not found" },
+        { status: 404 }
+      );
+    }
+
+    if (error?.code === "P2003") {
+      return NextResponse.json(
+        { success: false, error: "Cannot delete: Product is still referenced by other data" },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json(
       {
