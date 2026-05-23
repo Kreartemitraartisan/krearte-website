@@ -1,9 +1,13 @@
+// src/app/api/account/wishlist/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { PrismaClient } from "@prisma/client";
+// ✅ Gunakan prisma singleton (JANGAN new PrismaClient() di level modul!)
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
+// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   try {
@@ -16,7 +20,7 @@ export async function GET() {
       );
     }
 
-    // 🔍 Get user
+    // 🔍 Get user by email (sesuai logic asli kamu)
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
@@ -41,12 +45,12 @@ export async function GET() {
     // 🎯 Format response
     const items = wishlist.map((item) => ({
       id: item.id,
-      productId: item.product.id,
-      productName: item.product.name,
-      productSlug: item.product.slug,
-      productImage: item.product.images?.[0] || "",
-      price: item.product.price,
-      category: item.product.category,
+      productId: item.product?.id,
+      productName: item.product?.name || "Unknown",
+      productSlug: item.product?.slug || "",
+      productImage: item.product?.images?.[0] || "",
+      price: item.product?.price || 0,
+      category: item.product?.category || "",
     }));
 
     return NextResponse.json({
