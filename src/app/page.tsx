@@ -92,7 +92,7 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await fetch("/api/products?limit=100"); // Ambil lebih banyak untuk variasi
+        const response = await fetch("/api/products?limit=50"); // Ambil lebih banyak untuk variasi
         
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
