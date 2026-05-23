@@ -1,10 +1,8 @@
+// src/lib/auth.ts - ✅ FIXED: Import prisma dari singleton
 import { NextAuthOptions, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// ✅ Import prisma dari file singleton (JANGAN new PrismaClient() lagi!)
+import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -19,6 +17,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // ✅ Gunakan prisma yang di-import dari singleton
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
@@ -27,18 +26,17 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // ⚠️ Gunakan bcrypt.compare() di production!
         const isCorrectPassword = credentials.password === user.password;
 
         if (!isCorrectPassword) {
           return null;
         }
 
-        // ✅ Hanya return field yang ada di Prisma schema
         return {
           id: user.id,
           email: user.email,
           name: user.name ?? undefined,
-          // Tambahkan field lain HANYA jika ada di schema
         } as User;
       },
     }),
