@@ -1,16 +1,20 @@
-// src/app/api/account/wishlist/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-// ✅ Gunakan prisma singleton (JANGAN new PrismaClient() di level modul!)
-import { prisma } from "@/lib/prisma";
 
-// ✅ WAJIB: Cegah Next.js nge-build route ini secara statis
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET() {
   try {
+    // ✅ Lazy import (WAJIB di dalam function)
+    const [{ getServerSession }, { authOptions }, { prisma }] =
+      await Promise.all([
+        import("next-auth"),
+        import("@/app/api/auth/[...nextauth]/route"),
+        import("@/lib/prisma"),
+      ]);
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -20,7 +24,7 @@ export async function GET() {
       );
     }
 
-    // 🔍 Get user by email (sesuai logic asli kamu)
+    // 🔍 Get user
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
@@ -32,7 +36,7 @@ export async function GET() {
       );
     }
 
-    // ✅ FIX: ambil dari tabel Wishlist (relation)
+    // ✅ Fetch wishlist
     const wishlist = await prisma.wishlist.findMany({
       where: {
         userId: user.id,
@@ -42,7 +46,6 @@ export async function GET() {
       },
     });
 
-    // 🎯 Format response
     const items = wishlist.map((item) => ({
       id: item.id,
       productId: item.product?.id,
@@ -58,8 +61,10 @@ export async function GET() {
       items,
       count: items.length,
     });
+
   } catch (error) {
-    console.error("Error fetching wishlist:", error);
+    console.error("WISHLIST API ERROR:", error);
+
     return NextResponse.json(
       { success: false, error: "Failed to fetch wishlist" },
       { status: 500 }
