@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
@@ -69,9 +69,8 @@ const FALLBACK_CATEGORIES: Category[] = [
   },
 ];
 
-// ⏰ SHUFFLE INTERVAL (dalam milliseconds)
-// 15 menit = 15 * 60 * 1000 = 900000
-const SHUFFLE_INTERVAL = 15 * 60 * 1000; // 15 menit
+// ⏰ SHUFFLE INTERVAL (dalam milliseconds) - 15 menit
+const SHUFFLE_INTERVAL = 15 * 60 * 1000;
 
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -87,12 +86,16 @@ export default function HomePage() {
   
   // 🎲 State untuk tracking image index per category
   const [categoryImageIndex, setCategoryImageIndex] = useState<Record<string, number>>({});
+  
+  // Ref untuk menghindari infinite loop pada shuffle effect
+  const shuffleIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitializedRef = useRef(false);
 
-  // Fetch products
+  // Fetch products - ✅ Gunakan limit kecil untuk production
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await fetch("/api/products?limit=50"); // Ambil lebih banyak untuk variasi
+        const response = await fetch("/api/products?limit=12");
         
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
@@ -116,12 +119,10 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
-  // ✅ Fetch categories dengan proper error handling
+  // Fetch categories
   useEffect(() => {
     async function fetchCategories() {
       try {
-        console.log('📂 Fetching categories for homepage...');
-        
         const response = await fetch('/api/categories?collectionType=wallcovering&parentId=null');
         
         if (!response.ok) {
@@ -135,18 +136,13 @@ export default function HomePage() {
         
         const result = await response.json();
         
-        console.log('📂 Categories result:', result);
-        
         if (result.success && result.categories && result.categories.length > 0) {
-          console.log('✅ Categories loaded:', result.categories.length);
-          setCategories(result.categories.slice(0, 3)); // Ambil 3 kategori pertama
+          setCategories(result.categories.slice(0, 3));
         } else {
-          console.log('⚠️ No categories found, using fallback');
           setCategories(FALLBACK_CATEGORIES);
         }
       } catch (error) {
-        console.error("❌ Error fetching categories:", error);
-        console.log('🔄 Using fallback categories');
+        console.error("Error fetching categories:", error);
         setCategories(FALLBACK_CATEGORIES);
       } finally {
         setLoadingCategories(false);
@@ -156,63 +152,78 @@ export default function HomePage() {
     fetchCategories();
   }, []);
 
-  // 🎲 Auto-shuffle images setiap 15 menit
+  // 🎲 Auto-shuffle images setiap 15 menit - ✅ FIX: Hindari infinite loop
   useEffect(() => {
+    // Hanya jalankan sekali saat data sudah load
+    if (hasInitializedRef.current) return;
     if (categories.length === 0 || featuredProducts.length === 0) return;
+    
+    hasInitializedRef.current = true;
 
     // Fungsi untuk shuffle image index
     const shuffleImages = () => {
       const newIndex: Record<string, number> = {};
       
       categories.forEach((category) => {
-        // Cari semua produk di kategori ini
         const categoryProducts = featuredProducts.filter(
           p => p.category_slug === category.slug || p.category === category.slug
         );
         
-        // Kalau ada produk, pilih random index
         if (categoryProducts.length > 0) {
-          // Random produk mana yang dipilih
           const randomProductIndex = Math.floor(Math.random() * categoryProducts.length);
-          
-          // Simpan index produk yang terpilih
           newIndex[category.id] = randomProductIndex;
         }
       });
       
-      console.log('🎲 Shuffled category images:', newIndex);
-      setCategoryImageIndex(newIndex);
+      // Hanya update state jika ada perubahan (hindari re-render tidak perlu)
+      setCategoryImageIndex(prev => {
+        const hasChanged = Object.keys(newIndex).some(
+          key => newIndex[key] !== prev[key]
+        );
+        return hasChanged ? newIndex : prev;
+      });
     };
 
     // Shuffle pertama kali saat load
     shuffleImages();
 
     // Set interval untuk shuffle otomatis
-    const intervalId = setInterval(shuffleImages, SHUFFLE_INTERVAL);
+    shuffleIntervalRef.current = setInterval(shuffleImages, SHUFFLE_INTERVAL);
 
     // Cleanup interval saat component unmount
     return () => {
-      clearInterval(intervalId);
+      if (shuffleIntervalRef.current) {
+        clearInterval(shuffleIntervalRef.current);
+      }
     };
-  }, [categories, featuredProducts]);
+  }, [categories, featuredProducts]); // Dependencies tetap, tapi ada guard clause
 
-  // Helper untuk mendapatkan gambar kategori yang sedang aktif
-  const getCategoryHeroImage = (category: Category) => {
+  // Helper untuk mendapatkan gambar kategori - ✅ Gunakan useCallback
+  const getCategoryHeroImage = useCallback((category: Category) => {
     const categoryProducts = featuredProducts.filter(
       p => p.category_slug === category.slug || p.category === category.slug
     );
     
     if (categoryProducts.length === 0) return null;
     
-    // Ambil index yang sudah di-shuffle
-    const currentIndex = categoryImageIndex[category.id] || 0;
+    const currentIndex = categoryImageIndex[category.id] ?? 0;
     const selectedProduct = categoryProducts[currentIndex];
     
-    // Cari gambar pertama yang bukan video
     return selectedProduct?.images?.find(
       img => !img.endsWith('.mp4') && !img.endsWith('.webm')
     );
-  };
+  }, [featuredProducts, categoryImageIndex]);
+
+  // Memoize products by category untuk performance
+  const productsByCategory = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    featuredProducts.forEach(product => {
+      const key = product.category_slug || product.category;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(product);
+    });
+    return map;
+  }, [featuredProducts]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -228,7 +239,7 @@ export default function HomePage() {
             muted
             playsInline
             className="w-full h-full object-cover"
-            poster="/images/wallpaper-fallback.jpg"
+            // poster dihapus untuk menghindari 404 jika file tidak ada
           >
             <source src="/videos/wallpapers/dreamy-sky.mp4" type="video/mp4" />
             <img
@@ -365,7 +376,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ==================== ✅ CATEGORIES SECTION (AUTO-SHUFFLE) ==================== */}
+      {/* ==================== ✅ CATEGORIES SECTION (AUTO-SHUFFLE - FIXED) ==================== */}
       <section className="py-40 md:py-60 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
           
@@ -400,6 +411,8 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
               {categories.map((category, index) => {
                 const heroImage = getCategoryHeroImage(category);
+                const categoryProducts = productsByCategory.get(category.slug) || 
+                                        productsByCategory.get(category.category_slug || '') || [];
 
                 return (
                   <motion.div
@@ -420,7 +433,7 @@ export default function HomePage() {
                       {/* Background Image */}
                       {heroImage ? (
                         <img
-                          key={heroImage} // Key untuk trigger animasi saat gambar berubah
+                          key={`${category.id}-${categoryImageIndex[category.id]}`}
                           src={heroImage}
                           alt={category.name}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
@@ -458,10 +471,10 @@ export default function HomePage() {
                         </div>
                       </div>
                       
-                      {/* Indicator Dot (Optional - untuk show ada shuffle) */}
-                      {featuredProducts.filter(p => p.category_slug === category.slug || p.category === category.slug).length > 1 && (
+                      {/* Indicator Dot */}
+                      {categoryProducts.length > 1 && (
                         <div className="absolute top-4 right-4 flex gap-1.5">
-                          {Array.from({ length: Math.min(3, featuredProducts.filter(p => p.category_slug === category.slug || p.category === category.slug).length) }).map((_, i) => (
+                          {Array.from({ length: Math.min(3, categoryProducts.length) }).map((_, i) => (
                             <div
                               key={i}
                               className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
