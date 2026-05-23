@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const revalidate = 0;
 
 export async function GET(
   request: NextRequest,
-  context: any // ✅ hindari type conflict build
+  context: any
 ) {
   try {
     const { id } = await context.params;
+
+    // ✅ Lazy load (hindari error saat build)
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("@/lib/auth");
 
     const session = await getServerSession(authOptions);
 
@@ -27,9 +30,7 @@ export async function GET(
       where: { id },
       include: {
         items: {
-          include: {
-            product: true,
-          },
+          include: { product: true },
         },
         user: {
           select: {
@@ -66,7 +67,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error("ERROR ORDER API:", error);
+    console.error("ORDER API ERROR:", error);
 
     return NextResponse.json(
       { success: false, error: "Internal Server Error" },
