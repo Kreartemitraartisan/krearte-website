@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
@@ -38,6 +38,7 @@ interface Category {
   parent_id: string | null;
 }
 
+// ✅ Fallback categories dengan data yang benar
 const FALLBACK_CATEGORIES: Category[] = [
   {
     id: "1",
@@ -68,7 +69,8 @@ const FALLBACK_CATEGORIES: Category[] = [
   },
 ];
 
-const SHUFFLE_INTERVAL = 15 * 60 * 1000; // 15 menit
+// ⏰ SHUFFLE INTERVAL (dalam milliseconds) - 15 menit
+const SHUFFLE_INTERVAL = 15 * 60 * 1000;
 
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -498,9 +500,6 @@ export default function HomePage() {
                               alt={product.name}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                               loading="lazy"
-                              onError={(e) => {
-                                e.currentTarget.src = '/images/placeholder.jpg';
-                              }}
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
