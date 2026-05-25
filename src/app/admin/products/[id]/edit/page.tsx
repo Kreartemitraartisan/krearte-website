@@ -6,6 +6,7 @@ import { ChevronLeft, Loader2, Save, Upload, Film, Image as ImageIcon, Trash2, S
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 
+// ==================== TYPES ====================
 interface Material {
   id: string;
   name: string;
@@ -41,6 +42,7 @@ interface Product {
   category_slug?: string;
 }
 
+// ==================== MAIN COMPONENT ====================
 export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
@@ -57,8 +59,8 @@ export default function EditProductPage() {
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
-    category: "wallcovering",
-    category_slug: "",
+    category: "wallcovering", // Legacy category (dari DB: Chinoiserie, Floral, dll)
+    category_slug: "", // Collection category slug (wallcovering/designer-collection)
     collectionType: "wallcovering",
     is25DEligible: false,
     price: 0,
@@ -69,7 +71,7 @@ export default function EditProductPage() {
     recommendedMaterialIds: [] as string[],
   });
 
-  // ✅ Helper functions untuk memisahkan tipe material
+  // ✅ Helper: Filter physical materials (exclude services/add-ons)
   const isPhysicalMaterial = (m: Material) => {
     const cat = m.category?.toLowerCase() || '';
     return !cat.includes('jasa') && 
@@ -90,7 +92,7 @@ export default function EditProductPage() {
     return !isPhysicalMaterial(m) && !isSampleItem(m);
   };
 
-  // ✅ Fetch Product, Materials & Categories
+  // ✅ Fetch Product, Materials & Categories on mount
   useEffect(() => {
     async function fetchData() {
       try {
@@ -99,7 +101,7 @@ export default function EditProductPage() {
         const [productRes, materialsRes, categoriesRes] = await Promise.all([
           fetch(`/api/admin/products/${productId}`),
           fetch("/api/materials"),
-          fetch("/api/categories?collectionType=wallcovering"),
+          fetch("/api/categories"), // ✅ Fetch ALL categories (tanpa filter collectionType)
         ]);
 
         const productData = await productRes.json();
@@ -108,7 +110,7 @@ export default function EditProductPage() {
 
         console.log('🔎 Product API response:', productData);
 
-        // ✅ FIX: Pastikan data product ada dan valid
+        // ✅ FIX: Handle berbagai kemungkinan struktur response
         const product = productData?.product || productData?.data || productData;
         
         if (!product || !product.id) {
@@ -296,13 +298,7 @@ export default function EditProductPage() {
     } else if (type === "number") {
       setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     } else {
-      setFormData(prev => {
-        const updated = { ...prev, [name]: value };
-        if (name === "category") {
-          updated.collectionType = value === "designer" ? "designer" : "wallcovering";
-        }
-        return updated;
-      });
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -310,7 +306,6 @@ export default function EditProductPage() {
     setFormData(prev => ({
       ...prev,
       collectionType: newType,
-      category: newType,
       is25DEligible: newType === "wallcovering" ? false : prev.is25DEligible,
     }));
   };
@@ -353,6 +348,7 @@ export default function EditProductPage() {
     return acc;
   }, {} as Record<string, Material[]>);
 
+  // ✅ Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -377,6 +373,7 @@ export default function EditProductPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
+        
         {/* Basic Information */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Basic Information</h2>
@@ -410,29 +407,12 @@ export default function EditProductPage() {
               </p>
             </div>
 
+            {/* ✅ Category (Legacy) - Load dari DATABASE */}
             <div>
               <label className="block text-sm font-normal mb-2">Category (Legacy) *</label>
               <select
                 name="category"
                 value={formData.category}
-                onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black"
-              >
-                <option value="wallcovering">Wallcovering</option>
-                <option value="designer">Designer Collection</option>
-                <option value="material">Material</option>
-              </select>
-            </div>
-
-            {/* ✅ NEW: Category Slug Dropdown */}
-            <div>
-              <label className="block text-sm font-normal mb-2">
-                Collection Category
-                <span className="text-krearte-gray-400 font-light ml-1">(Optional)</span>
-              </label>
-              <select
-                name="category_slug"
-                value={formData.category_slug || ""}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black bg-white"
                 disabled={loadingCategories}
@@ -443,10 +423,31 @@ export default function EditProductPage() {
                 ) : (
                   categories.map((cat) => (
                     <option key={cat.id} value={cat.slug}>
-                      {cat.name}
+                      {cat.name} {/* Chinoiserie, Floral, Nature, dll */}
                     </option>
                   ))
                 )}
+              </select>
+              <p className="text-xs text-krearte-gray-500 mt-1">
+                Category dari database (Chinoiserie, Floral, Nature, dll)
+              </p>
+            </div>
+
+            {/* ✅ Collection Category - Pilihan Manual */}
+            <div>
+              <label className="block text-sm font-normal mb-2">
+                Collection Category
+                <span className="text-krearte-gray-400 font-light ml-1">(Optional)</span>
+              </label>
+              <select
+                name="category_slug"
+                value={formData.category_slug || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black bg-white"
+              >
+                <option value="">Select a category...</option>
+                <option value="wallcovering">Wallcovering</option>
+                <option value="designer-collection">Designer Collection</option>
               </select>
               <p className="text-xs text-krearte-gray-500 mt-1">
                 Used for filtering in collection pages
