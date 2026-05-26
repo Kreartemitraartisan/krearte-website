@@ -1,3 +1,4 @@
+// app/admin/products/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -17,47 +18,37 @@ interface Product {
   stock: number;
   createdAt: string;
   updatedAt: string;
-}
-
-interface Material {
-  id: string;
-  name: string;
-  pricePerM2: number;
-  waste: number;
+  // ✅ TAMBAHKAN: priceRange dari API
+  priceRange?: {
+    min: number;
+    max: number;
+  };
 }
 
 export default function AdminProductsPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch products and materials
+  // Fetch products
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
     try {
-      console.log('🔍 Fetching admin data...');
+      console.log('🔍 Fetching admin products...');
       
-      const [productsRes, materialsRes] = await Promise.all([
-        fetch("/api/admin/products"),
-        fetch("/api/materials"),
-      ]);
-
+      const productsRes = await fetch("/api/admin/products");
       const productsData = await productsRes.json();
-      const materialsData = await materialsRes.json();
 
       console.log('📦 Products API response:', productsData);
-      console.log('📦 Materials API response:', materialsData);
 
-      // ✅ FIX: API returns "products" not "items"
+      // ✅ FIX: API returns "products"
       setProducts(productsData.products || productsData.items || []);
-      setMaterials(materialsData.materials || materialsData.items || []);
       
       console.log(`✅ Loaded ${productsData.products?.length || 0} products`);
     } catch (error) {
@@ -68,36 +59,8 @@ export default function AdminProductsPage() {
     }
   };
 
-  // ✅ Calculate price range per m² based on available materials
-  const calculatePriceRange = (availableMaterialIds: string[]) => {
-    if (!availableMaterialIds || availableMaterialIds.length === 0) {
-      return { min: 0, max: 0 };
-    }
-
-    // Filter materials yang tersedia untuk product ini
-    const availableMaterials = materials.filter(m => 
-      availableMaterialIds.includes(m.id)
-    );
-
-    if (availableMaterials.length === 0) {
-      return { min: 0, max: 0 };
-    }
-
-    // ✅ Min price = material termurah (pricePerM2)
-    const minPrice = Math.min(...availableMaterials.map(m => m.pricePerM2));
-    
-    // ✅ Max price = material termahal (pricePerM2)
-    const maxPrice = Math.max(...availableMaterials.map(m => m.pricePerM2));
-
-    return { 
-      min: minPrice, 
-      max: maxPrice,
-    };
-  };
-
-  // ✅ IMPROVED: Delete function with better error handling & loading state
+  // ✅ IMPROVED: Delete function
   const handleDelete = async (id: string, productName: string) => {
-    // Confirm dengan nama produk
     const confirmed = confirm(
       `⚠️ Are you sure you want to delete "${productName}"?\n\nThis will also remove all associated images and material assignments.`
     );
@@ -115,14 +78,11 @@ export default function AdminProductsPage() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // ✅ Success - Remove from local state immediately (lebih cepat daripada re-fetch)
         setProducts(prev => prev.filter(p => p.id !== id));
         alert(`✅ "${productName}" deleted successfully!`);
       } else {
-        // ❌ Handle specific error messages from backend
         const errorMsg = result.error || result.message || "Unknown error";
         
-        // Detect foreign key constraint errors
         if (errorMsg.includes('foreign key') || errorMsg.includes('constraint')) {
           alert(
             `❌ Cannot delete "${productName}"\n\n` +
@@ -137,7 +97,6 @@ export default function AdminProductsPage() {
     } catch (error: any) {
       console.error("Delete network error:", error);
       
-      // Handle network errors
       if (error.message?.includes('Failed to fetch')) {
         alert("❌ Connection error. Please check your internet and try again.");
       } else {
@@ -161,7 +120,6 @@ export default function AdminProductsPage() {
     product.slug.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -188,7 +146,6 @@ export default function AdminProductsPage() {
         </Link>
       </div>
 
-      {/* Global Error Message */}
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -202,7 +159,6 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* Search */}
       <div className="mb-6">
         <div className="relative max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-krearte-gray-400" />
@@ -216,41 +172,26 @@ export default function AdminProductsPage() {
         </div>
       </div>
 
-      {/* Products Table */}
       <div className="bg-white rounded-lg shadow-sm border border-krearte-gray-200 overflow-hidden">
         <table className="w-full">
           <thead className="bg-krearte-gray-50 border-b border-krearte-gray-200">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">
-                Product
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">
-                Category
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">
-                Price Range
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">
-                Stock
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">
-                Created
-              </th>
-              <th className="px-6 py-4 text-right text-xs font-normal text-krearte-gray-600 uppercase">
-                Actions
-              </th>
+              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">Product</th>
+              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">Category</th>
+              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">Price Range</th>
+              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">Stock</th>
+              <th className="px-6 py-4 text-left text-xs font-normal text-krearte-gray-600 uppercase">Created</th>
+              <th className="px-6 py-4 text-right text-xs font-normal text-krearte-gray-600 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-krearte-gray-100">
             {filteredProducts.map((product) => {
-              const priceRange = calculatePriceRange(product.availableMaterialIds);
               const isDeleting = deletingId === product.id;
               
               return (
                 <tr key={product.id} className="hover:bg-krearte-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      {/* Product Thumbnail */}
                       <div className="w-10 h-10 bg-krearte-gray-100 rounded overflow-hidden flex-shrink-0">
                         {product.images && product.images.length > 0 ? (
                           (() => {
@@ -259,18 +200,9 @@ export default function AdminProductsPage() {
                             ) || product.images[0];
                             
                             return firstImage?.endsWith('.mp4') || firstImage?.endsWith('.webm') ? (
-                              <video 
-                                src={firstImage} 
-                                className="w-full h-full object-cover" 
-                                muted 
-                                playsInline
-                              />
+                              <video src={firstImage} className="w-full h-full object-cover" muted playsInline />
                             ) : (
-                              <img 
-                                src={firstImage} 
-                                alt={product.name} 
-                                className="w-full h-full object-cover" 
-                              />
+                              <img src={firstImage} alt={product.name} className="w-full h-full object-cover" />
                             );
                           })()
                         ) : (
@@ -281,60 +213,43 @@ export default function AdminProductsPage() {
                       </div>
                       
                       <div>
-                        <p className="font-medium text-krearte-black">
-                          {product.name}
-                        </p>
-                        <p className="text-sm text-krearte-gray-500">
-                          {product.slug}
-                        </p>
+                        <p className="font-medium text-krearte-black">{product.name}</p>
+                        <p className="text-sm text-krearte-gray-500">{product.slug}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-sm text-krearte-gray-600 capitalize">
-                      {product.category}
-                    </span>
+                    <span className="text-sm text-krearte-gray-600 capitalize">{product.category}</span>
                   </td>
+                  
+                  {/* ✅ PRICE RANGE - Gunakan dari API */}
                   <td className="px-6 py-4">
                     <div className="text-sm">
-                      {priceRange.min > 0 ? (
+                      {product.priceRange && product.priceRange.min > 0 ? (
                         <>
                           <span className="font-medium text-krearte-black">
-                            {formatCurrency(priceRange.min)}
+                            {formatCurrency(product.priceRange.min)}
                           </span>
-                          {priceRange.min !== priceRange.max && (
+                          {product.priceRange.min !== product.priceRange.max && (
                             <>
                               <span className="text-krearte-gray-500 mx-1">-</span>
                               <span className="text-krearte-gray-600">
-                                {formatCurrency(priceRange.max)}
+                                {formatCurrency(product.priceRange.max)}
                               </span>
                             </>
                           )}
-                          <span className="text-xs text-krearte-gray-400 ml-1">
-                            /m²
-                          </span>
+                          <span className="text-xs text-krearte-gray-400 ml-1">/m²</span>
                         </>
                       ) : product.availableMaterialIds?.length === 0 ? (
-                        <span className="text-krearte-gray-400 text-xs">
-                          No materials assigned
-                        </span>
-                      ) : materials.length === 0 ? (
-                        <span className="text-krearte-gray-400 text-xs">
-                          Loading materials...
-                        </span>
+                        <span className="text-krearte-gray-400 text-xs">No materials assigned</span>
                       ) : (
-                        <span className="text-krearte-gray-400 text-xs">
-                          Materials not found
-                        </span>
+                        <span className="text-krearte-gray-400 text-xs">Materials not found</span>
                       )}
                     </div>
                   </td>
+                  
                   <td className="px-6 py-4">
-                    <span className={`text-sm ${
-                      product.stock > 0 
-                        ? "text-krearte-black" 
-                        : "text-red-600"
-                    }`}>
+                    <span className={`text-sm ${product.stock > 0 ? "text-krearte-black" : "text-red-600"}`}>
                       {product.stock} units
                     </span>
                   </td>
@@ -357,9 +272,7 @@ export default function AdminProductsPage() {
                         onClick={() => handleDelete(product.id, product.name)}
                         disabled={isDeleting}
                         className={`p-2 rounded transition-colors ${
-                          isDeleting 
-                            ? "bg-red-100 cursor-not-allowed" 
-                            : "hover:bg-red-50"
+                          isDeleting ? "bg-red-100 cursor-not-allowed" : "hover:bg-red-50"
                         }`}
                         title={isDeleting ? "Deleting..." : "Delete"}
                       >
@@ -377,7 +290,6 @@ export default function AdminProductsPage() {
           </tbody>
         </table>
 
-        {/* Empty State */}
         {filteredProducts.length === 0 && (
           <div className="text-center py-12 text-krearte-gray-500">
             <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
