@@ -1,11 +1,11 @@
+// app/admin/products/new/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, Upload, Sparkles, Film, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Upload, Sparkles, Film, Image as ImageIcon, Loader2 } from "lucide-react";
 import { slugify, formatCurrency } from "@/lib/utils";
-import { supabase } from "@/lib/supabase-client";
 
 interface Material {
   id: string;
@@ -18,6 +18,15 @@ interface Material {
   resellerPricePerM2?: number;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image_url: string | null;
+  collection_type: string;
+}
+
 export default function NewProductPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -26,13 +35,16 @@ export default function NewProductPage() {
   const [error, setError] = useState("");
   
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
     description: "",
-    category: "wallcovering",
+    category: "", // ✅ Category dari database (Chinoiserie, Floral, dll)
+    category_slug: "", // ✅ Collection Category (wallcovering/designer-collection)
     collectionType: "wallcovering",
     is25DEligible: false,
     stock: 0,
@@ -42,24 +54,34 @@ export default function NewProductPage() {
 
   const [images, setImages] = useState<string[]>([]);
 
-  // ✅ Fetch ALL materials
+  // ✅ Fetch Materials & Categories on mount
   useEffect(() => {
-    async function fetchMaterials() {
+    async function fetchData() {
       try {
-        const response = await fetch("/api/materials");
-        const result = await response.json();
+        const [materialsRes, categoriesRes] = await Promise.all([
+          fetch("/api/materials"),
+          fetch("/api/categories"), // ✅ Fetch ALL categories
+        ]);
+
+        const materialsData = await materialsRes.json();
+        const categoriesData = await categoriesRes.json();
         
-        if (result.success) {
-          setMaterials(result.materials);
+        if (materialsData.success) {
+          setMaterials(materialsData.materials || []);
+        }
+        
+        if (categoriesData.success) {
+          setCategories(categoriesData.categories || []);
         }
       } catch (error) {
-        console.error("Error fetching materials:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoadingMaterials(false);
+        setLoadingCategories(false);
       }
     }
     
-    fetchMaterials();
+    fetchData();
   }, []);
 
   // ✅ Helper functions untuk memisahkan tipe material
@@ -81,9 +103,7 @@ export default function NewProductPage() {
 
   const materialsByCategory = physicalMaterials.reduce((acc, material) => {
     const category = material.category || 'Other';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
+    if (!acc[category]) acc[category] = [];
     acc[category].push(material);
     return acc;
   }, {} as Record<string, Material[]>);
@@ -107,23 +127,10 @@ export default function NewProductPage() {
     }
   };
 
-  // ✅ FIXED: Upload ke VPS dengan debug log & validasi MIME type
-  // ✅ FIXED: Upload dengan validasi ketat & debug log
+  // ✅ FIXED: Upload ke VPS
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
-    
-    console.log("🎯 File input event triggered:", {
-      filesCount: files?.length,
-      firstFileName: files?.[0]?.name,
-      firstFileSize: files?.[0]?.size,
-      inputElement: e.target
-    });
-    
-    if (!files || files.length === 0) {
-      console.error("❌ ERROR: No files selected!");
-      alert("❌ Tidak ada file yang dipilih. Silakan coba lagi.");
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     setUploadProgress(0);
@@ -132,18 +139,7 @@ export default function NewProductPage() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // ✅ Validasi file ada
-        if (!file) {
-          console.error(`❌ File index ${i} is null/undefined!`);
-          continue;
-        }
-        
-        console.log(`📁 Processing ${type} ${i + 1}:`, {
-          name: file.name,
-          type: file.type,
-          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-          lastModified: new Date(file.lastModified).toISOString()
-        });
+        console.log(`📁 Processing ${type}:`, file.name);
 
         const isVideo = type === "video";
         const maxSize = isVideo ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
@@ -152,90 +148,45 @@ export default function NewProductPage() {
           throw new Error(`File terlalu besar. Maksimal ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        // ✅ Validasi MIME type
+        // Validasi MIME type
         if (isVideo) {
-          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/ogg'];
-          if (!allowedVideoTypes.includes(file.type)) {
-            throw new Error(`Format video tidak didukung. Gunakan: MP4, WebM, MOV, atau M4V`);
-          }
+          const allowed = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
+          if (!allowed.includes(file.type)) throw new Error("Format video tidak didukung");
         } else {
-          const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-          if (!allowedImageTypes.includes(file.type)) {
-            throw new Error(`Format gambar tidak didukung. Gunakan: JPG, PNG, GIF, atau WebP`);
-          }
+          const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+          if (!allowed.includes(file.type)) throw new Error("Format gambar tidak didukung");
         }
 
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => Math.min(prev + 10, 90));
-        }, 200);
-
-        // ✅ Build FormData dengan VALIDASI
-        const formData = new FormData();
-        
-        // Append file - PASTIKAN field name 'file' sama dengan backend
-        formData.append('file', file, file.name);
-        formData.append('type', type);
-        
-        // ✅ Debug: Log FormData contents
-        console.log("📦 FormData contents:");
-        for (let [key, value] of formData.entries()) {
-          if (value instanceof File) {
-            console.log(`  - ${key}: File(${value.name}, ${(value.size / 1024 / 1024).toFixed(2)}MB)`);
-          } else {
-            console.log(`  - ${key}: ${value}`);
-          }
-        }
-
-        console.log("📤 Sending POST request to upload server...");
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+        formDataUpload.append('type', type);
 
         const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
           headers: {
-            // ✅ JANGAN set Content-Type! Browser akan set otomatis dengan boundary
             'Authorization': 'Bearer krearte-super-secret-upload-key-2026-pb6xv4Tqz7RDtFj0yXcUO5QkJ'
           },
-          body: formData,
-        });
-
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-
-        console.log("📥 Response received:", {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok
+          body: formDataUpload,
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error("❌ Upload failed:", {
-            status: response.status,
-            statusText: response.statusText,
-            responseBody: errorText
-          });
-          throw new Error(`Upload failed: ${response.status} - ${errorText || response.statusText}`);
+          throw new Error(`Upload failed: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
-        console.log("✅ Upload success:", result);
-        
-        if (!result.url) {
-          console.error("❌ Server response missing URL:", result);
-          throw new Error("Server response tidak valid");
-        }
+        if (!result.url) throw new Error("Invalid server response");
         
         setImages(prev => [...prev, result.url]);
-        
-        setTimeout(() => setUploadProgress(0), 500);
       }
     } catch (err: any) {
       console.error("❌ Upload error:", err);
-      setError(err.message || "Failed to upload media");
-      alert(`❌ ${err.message || "Upload gagal!"}`);
+      setError(err.message || "Upload failed");
+      alert(`❌ ${err.message}`);
     } finally {
       setUploading(false);
-      // ✅ Reset input setelah upload selesai (bukan sebelum)
       e.target.value = "";
+      setUploadProgress(0);
     }
   };
 
@@ -245,42 +196,30 @@ export default function NewProductPage() {
 
   const toggleAvailableMaterial = (materialId: string) => {
     setFormData(prev => {
-      const isAlreadyAvailable = prev.availableMaterialIds.includes(materialId);
-      
-      if (isAlreadyAvailable) {
+      const exists = prev.availableMaterialIds.includes(materialId);
+      if (exists) {
         return {
           ...prev,
           availableMaterialIds: prev.availableMaterialIds.filter(id => id !== materialId),
           recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
         };
       } else {
-        return {
-          ...prev,
-          availableMaterialIds: [...prev.availableMaterialIds, materialId]
-        };
+        return { ...prev, availableMaterialIds: [...prev.availableMaterialIds, materialId] };
       }
     });
   };
 
   const toggleRecommendedMaterial = (materialId: string) => {
     if (!formData.availableMaterialIds.includes(materialId)) {
-      alert("Please add this material to Available Materials first");
+      alert("Add to Available Materials first");
       return;
     }
-
     setFormData(prev => {
-      const isAlreadyRecommended = prev.recommendedMaterialIds.includes(materialId);
-      
-      if (isAlreadyRecommended) {
-        return {
-          ...prev,
-          recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId)
-        };
+      const exists = prev.recommendedMaterialIds.includes(materialId);
+      if (exists) {
+        return { ...prev, recommendedMaterialIds: prev.recommendedMaterialIds.filter(id => id !== materialId) };
       } else {
-        return {
-          ...prev,
-          recommendedMaterialIds: [...prev.recommendedMaterialIds, materialId]
-        };
+        return { ...prev, recommendedMaterialIds: [...prev.recommendedMaterialIds, materialId] };
       }
     });
   };
@@ -291,18 +230,20 @@ export default function NewProductPage() {
     setLoading(true);
 
     try {
-      if (!formData.name.trim()) throw new Error("Product name is required");
-      if (!formData.slug.trim()) throw new Error("Slug is required");
+      if (!formData.name.trim() || !formData.slug.trim() || !formData.category) {
+        throw new Error("Name, Slug, and Category are required");
+      }
       
       const imagePayload = images.length > 0 
-        ? images.filter(url => url && url.trim() !== "") 
+        ? images.filter(url => url?.trim()) 
         : ["/images/wallpaper-fallback.jpg"];
 
       const payload = {
         name: formData.name.trim(),
         slug: formData.slug.trim(),
         description: formData.description?.trim() || "",
-        category: formData.category || "wallcovering",
+        category: formData.category, // ✅ Category dari DB (Chinoiserie, dll)
+        category_slug: formData.category_slug, // ✅ Collection Category (wallcovering/designer)
         price: 0,
         images: imagePayload,
         collectionType: formData.collectionType || "wallcovering",
@@ -312,7 +253,7 @@ export default function NewProductPage() {
         recommendedMaterialIds: formData.recommendedMaterialIds || [],
       };
 
-      console.log("📤 Payload:", JSON.stringify(payload, null, 2));
+      console.log("📤 Creating product:", payload);
 
       const response = await fetch("/api/admin/products", {
         method: "POST",
@@ -320,21 +261,13 @@ export default function NewProductPage() {
         body: JSON.stringify(payload),
       });
 
-      const responseText = await response.text();
-      console.log("📥 Raw Response:", responseText);
-
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch {
-        result = { error: "Invalid JSON from server", raw: responseText };
-      }
+      const result = await response.json();
 
       if (!response.ok) {
-        console.error("❌ API Error:", result);
         throw new Error(result.error || result.message || `HTTP ${response.status}`);
       }
 
+      alert("✅ Product created successfully!");
       router.push("/admin/products");
       router.refresh();
     } catch (err: any) {
@@ -350,38 +283,30 @@ export default function NewProductPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link
-          href="/admin/products"
-          className="p-2 text-krearte-gray-600 hover:text-krearte-black hover:bg-krearte-gray-100 rounded transition-colors"
-        >
+        <Link href="/admin/products" className="p-2 text-krearte-gray-600 hover:text-krearte-black hover:bg-krearte-gray-100 rounded transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <h1 className="font-sans text-3xl font-light mb-2">Add Product</h1>
-          <p className="text-krearte-gray-600 font-light">
-            Create a new wallcovering product listing
-          </p>
+          <p className="text-krearte-gray-600 font-light">Create a new wallcovering product listing</p>
         </div>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-600 text-sm rounded">
           {error}
         </div>
       )}
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
+        
         {/* Basic Info */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Basic Information</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">
-                Product Name *
-              </label>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-normal text-krearte-black mb-2">Product Name *</label>
               <input
                 type="text"
                 name="name"
@@ -393,10 +318,8 @@ export default function NewProductPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">
-                Slug *
-              </label>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-normal text-krearte-black mb-2">Slug *</label>
               <input
                 type="text"
                 name="slug"
@@ -406,43 +329,53 @@ export default function NewProductPage() {
                 className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
                 placeholder="e.g., blush-bunny-meadow"
               />
-              <p className="text-xs text-krearte-gray-500 mt-1">
-                Used in URL: /product/{formData.slug || "your-slug"}
-              </p>
+              <p className="text-xs text-krearte-gray-500 mt-1">Used in URL: /product/{formData.slug || "your-slug"}</p>
             </div>
 
+            {/* ✅ Collection Type - Pilihan Manual */}
             <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">
-                Category *
-              </label>
+              <label className="block text-sm font-normal text-krearte-black mb-2">Collection Category *</label>
+              <select
+                name="category_slug"
+                value={formData.category_slug}
+                onChange={handleInputChange}
+                required
+                className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light bg-white"
+              >
+                <option value="">Select collection type...</option>
+                <option value="wallcovering">Wallcovering</option>
+                <option value="designer-collection">Designer Collection</option>
+              </select>
+              <p className="text-xs text-krearte-gray-500 mt-1">Main collection type for filtering</p>
+            </div>
+
+            {/* ✅ Category - Load dari Database */}
+            <div>
+              <label className="block text-sm font-normal text-krearte-black mb-2">Category (Legacy) *</label>
               <select
                 name="category"
                 value={formData.category}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
+                className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light bg-white"
+                disabled={loadingCategories}
               >
-                <option value="wallcovering">Wallcovering</option>
-                <option value="designer">Designer Collection</option>
-                <option value="zen">Zen</option>
-                <option value="chinoiserie">Chinoiserie</option>
-                <option value="floral">Floral & Leaves</option>
-                <option value="animals">Animals</option>
-                <option value="geometric">Geometric</option>
-                <option value="abstract">Abstract</option>
-                <option value="classic">Classic</option>
-                <option value="modern">Modern</option>
-                <option value="tropical">Tropical</option>
-                <option value="vintage">Vintage</option>
-                <option value="minimalist">Minimalist</option>
-                <option value="luxury">Luxury</option>
+                <option value="">Select a category...</option>
+                {loadingCategories ? (
+                  <option disabled>Loading categories...</option>
+                ) : (
+                  categories.map((cat) => (
+                    <option key={cat.id} value={cat.slug}>
+                      {cat.name} {/* Chinoiserie, Floral, Abstract, dll */}
+                    </option>
+                  ))
+                )}
               </select>
+              <p className="text-xs text-krearte-gray-500 mt-1">Specific design category from database</p>
             </div>
 
             <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">
-                Stock (units)
-              </label>
+              <label className="block text-sm font-normal text-krearte-black mb-2">Stock (units)</label>
               <input
                 type="number"
                 name="stock"
@@ -452,9 +385,6 @@ export default function NewProductPage() {
                 className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
                 placeholder="0"
               />
-              <p className="text-xs text-krearte-gray-500 mt-1">
-                Available inventory for this product
-              </p>
             </div>
 
             <div className="flex items-center">
@@ -477,9 +407,7 @@ export default function NewProductPage() {
           </div>
 
           <div className="mt-6">
-            <label className="block text-sm font-normal text-krearte-black mb-2">
-              Description
-            </label>
+            <label className="block text-sm font-normal text-krearte-black mb-2">Description</label>
             <textarea
               name="description"
               value={formData.description}
@@ -491,12 +419,9 @@ export default function NewProductPage() {
           </div>
         </div>
 
-        {/* Collection Type */}
+        {/* Collection Type Buttons */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Collection Type</h2>
-          <p className="text-sm font-light text-krearte-gray-600 mb-4">
-            Pilih kategori koleksi untuk design ini. Designer Collections menampilkan material premium & metallic.
-          </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
@@ -509,9 +434,7 @@ export default function NewProductPage() {
               }`}
             >
               <p className="font-normal mb-1">Wallcovering</p>
-              <p className={`text-sm ${
-                formData.collectionType === "wallcovering" ? "text-krearte-gray-300" : "text-krearte-gray-500"
-              }`}>
+              <p className={`text-sm ${formData.collectionType === "wallcovering" ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
                 Standard collection with PVC materials
               </p>
             </button>
@@ -528,128 +451,57 @@ export default function NewProductPage() {
                 <Sparkles className="w-4 h-4" />
                 Designer Collections
               </p>
-              <p className={`text-sm ${
-                formData.collectionType === "designer" ? "text-krearte-gray-300" : "text-krearte-gray-500"
-              }`}>
+              <p className={`text-sm ${formData.collectionType === "designer" ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
                 Premium & metallic materials showcase
               </p>
             </button>
           </div>
         </div>
 
-        {/* Product Media Section */}
+        {/* Product Media */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Product Media</h2>
           
-          {/* Image Upload */}
           <div className="mb-6">
             <label className="block text-sm font-normal text-krearte-black mb-3 flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" />
-              Product Images
+              <ImageIcon className="w-4 h-4" /> Product Images
             </label>
             <div className="border-2 border-dashed border-krearte-gray-300 rounded-lg p-6 text-center">
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => handleMediaUpload(e, "image")}
-                disabled={uploading}
-                className="hidden"
-                id="image-upload"
-              />
-              <label
-                htmlFor="image-upload"
-                className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
-                  uploading 
-                    ? "bg-krearte-gray-400 cursor-not-allowed" 
-                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
-                }`}
-              >
-                <Upload className="w-4 h-4" />
-                {uploading ? `Uploading... ${uploadProgress}%` : "Upload Images"}
+              <input type="file" accept="image/*" multiple onChange={(e) => handleMediaUpload(e, "image")} disabled={uploading} className="hidden" id="image-upload" />
+              <label htmlFor="image-upload" className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${uploading ? "bg-krearte-gray-400" : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"}`}>
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading ? `Uploading...` : "Upload Images"}
               </label>
-              <p className="text-sm text-krearte-gray-500 mt-2">
-                PNG, JPG, GIF, WebP up to 20MB
-              </p>
+              <p className="text-sm text-krearte-gray-500 mt-2">PNG, JPG, GIF, WebP up to 20MB</p>
             </div>
           </div>
 
-          {/* Video Upload */}
           <div className="mb-6">
             <label className="block text-sm font-normal text-krearte-black mb-3 flex items-center gap-2">
-              <Film className="w-4 h-4" />
-              Product Videos
+              <Film className="w-4 h-4" /> Product Videos
             </label>
             <div className="border-2 border-dashed border-krearte-gray-300 rounded-lg p-6 text-center">
-              <input
-                type="file"
-                accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
-                multiple
-                onChange={(e) => handleMediaUpload(e, "video")}
-                disabled={uploading}
-                className="hidden"
-                id="video-upload"
-              />
-              <label
-                htmlFor="video-upload"
-                className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${
-                  uploading 
-                    ? "bg-krearte-gray-400 cursor-not-allowed" 
-                    : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
-                }`}
-              >
-                <Upload className="w-4 h-4" />
-                {uploading ? `Uploading... ${uploadProgress}%` : "Upload Videos"}
+              <input type="file" accept="video/mp4,video/webm,video/quicktime" multiple onChange={(e) => handleMediaUpload(e, "video")} disabled={uploading} className="hidden" id="video-upload" />
+              <label htmlFor="video-upload" className={`cursor-pointer inline-flex items-center gap-3 px-6 py-3 rounded-full text-sm font-medium transition-colors disabled:opacity-50 ${uploading ? "bg-krearte-gray-400" : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"}`}>
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading ? `Uploading...` : "Upload Videos"}
               </label>
-              <p className="text-sm text-krearte-gray-500 mt-2">
-                MP4, WebM, MOV, M4V up to 100MB
-              </p>
+              <p className="text-sm text-krearte-gray-500 mt-2">MP4, WebM, MOV up to 100MB</p>
             </div>
           </div>
 
-          {/* Media Preview Grid */}
           {images.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
               {images.map((media, index) => {
-                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov') || media.endsWith('.m4v');
-                
+                const isVideo = media.endsWith('.mp4') || media.endsWith('.webm') || media.endsWith('.mov');
                 return (
                   <div key={index} className="relative aspect-square bg-krearte-gray-100 rounded-lg overflow-hidden group">
-                    {isVideo ? (
-                      <video
-                        src={media}
-                        className="w-full h-full object-cover"
-                        muted
-                        playsInline
-                        controls={false}
-                      />
-                    ) : (
-                      <img
-                        src={media}
-                        alt={`Product ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                    
+                    {isVideo ? <video src={media} className="w-full h-full object-cover" muted playsInline /> : <img src={media} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />}
                     <div className="absolute top-2 left-2 flex gap-1">
-                      {index === 0 && (
-                        <span className="px-2 py-1 bg-krearte-black text-krearte-white text-xs rounded">
-                          Primary
-                        </span>
-                      )}
-                      {isVideo && (
-                        <span className="px-2 py-1 bg-blue-600 text-krearte-white text-xs rounded flex items-center gap-1">
-                          <Film className="w-3 h-3" />
-                          Video
-                        </span>
-                      )}
+                      {index === 0 && <span className="px-2 py-1 bg-krearte-black text-krearte-white text-xs rounded">Primary</span>}
+                      {isVideo && <span className="px-2 py-1 bg-blue-600 text-krearte-white text-xs rounded flex items-center gap-1"><Film className="w-3 h-3" /> Video</span>}
                     </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-krearte-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                    >
+                    <button type="button" onClick={() => removeImage(index)} className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-krearte-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -659,91 +511,30 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Available Materials - PHYSICAL ONLY */}
+        {/* Materials Section */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2">Available Materials</h2>
-          <p className="text-sm font-light text-krearte-gray-600 mb-6">
-            Pilih material fisik yang tersedia untuk product ini.
-          </p>
+          <p className="text-sm font-light text-krearte-gray-600 mb-6">Pilih material fisik yang tersedia untuk product ini.</p>
           
           {loadingMaterials ? (
-            <div className="text-center py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" />
-              <p className="text-sm text-krearte-gray-500">Loading materials...</p>
-            </div>
+            <div className="text-center py-8"><div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" /><p className="text-sm text-krearte-gray-500">Loading materials...</p></div>
           ) : physicalMaterials.length === 0 ? (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                ⚠️ No physical materials found. Please add materials first in the Materials section.
-              </p>
-              <Link
-                href="/admin/materials"
-                className="inline-flex items-center gap-2 mt-2 text-sm text-krearte-black font-medium hover:text-krearte-gray-600"
-              >
-                Go to Materials Management →
-              </Link>
-            </div>
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><p className="text-sm text-yellow-800">⚠️ No physical materials found.</p><Link href="/admin/materials" className="inline-flex items-center gap-2 mt-2 text-sm text-krearte-black font-medium hover:text-krearte-gray-600">Go to Materials Management →</Link></div>
           ) : (
             <div className="space-y-6">
               {Object.entries(materialsByCategory).map(([category, categoryMaterials]) => (
                 <div key={category}>
-                  <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">
-                    {category}
-                  </h4>
+                  <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">{category}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {categoryMaterials.map((material) => (
-                      <button
-                        key={material.id}
-                        type="button"
-                        onClick={() => toggleAvailableMaterial(material.id)}
-                        className={`p-3 border rounded-lg text-left transition-all ${
-                          formData.availableMaterialIds.includes(material.id)
-                            ? "border-krearte-black bg-krearte-black text-krearte-white"
-                            : "border-krearte-gray-200 hover:border-krearte-black"
-                        }`}
-                      >
+                      <button key={material.id} type="button" onClick={() => toggleAvailableMaterial(material.id)} className={`p-3 border rounded-lg text-left transition-all ${formData.availableMaterialIds.includes(material.id) ? "border-krearte-black bg-krearte-black text-krearte-white" : "border-krearte-gray-200 hover:border-krearte-black"}`}>
                         <p className="font-normal text-sm">{material.name}</p>
-                        <p className={`text-xs mt-1 ${
-                          formData.availableMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
-                        }`}>
-                          Rp {material.pricePerM2.toLocaleString()}/m² • {material.width}
-                        </p>
+                        <p className={`text-xs mt-1 ${formData.availableMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>Rp {material.pricePerM2.toLocaleString()}/m² • {material.width}</p>
                       </button>
                     ))}
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Selected Materials Summary */}
-          {formData.availableMaterialIds.length > 0 && (
-            <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
-              <p className="text-sm font-medium text-krearte-black mb-3">
-                Selected ({formData.availableMaterialIds.length}):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {materials
-                  .filter(m => formData.availableMaterialIds.includes(m.id))
-                  .map((material) => (
-                    <span
-                      key={material.id}
-                      className="inline-flex items-center gap-2 px-3 py-1 bg-krearte-black text-krearte-white text-xs rounded-full"
-                    >
-                      {material.name}
-                      {isServiceOrAddon(material) && (
-                        <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] rounded">ADD-ON</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleAvailableMaterial(material.id)}
-                        className="hover:text-krearte-gray-300 ml-1"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-              </div>
             </div>
           )}
         </div>
@@ -752,134 +543,46 @@ export default function NewProductPage() {
         {formData.availableMaterialIds.length > 0 && (
           <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
             <h2 className="font-sans text-lg font-normal mb-2">Recommended Materials (Optional)</h2>
-            <p className="text-sm font-light text-krearte-gray-600 mb-6">
-              Tandai material yang direkomendasikan untuk design ini (harus sudah ada di available materials).
-            </p>
-            
+            <p className="text-sm font-light text-krearte-gray-600 mb-6">Tandai material yang direkomendasikan untuk design ini.</p>
             <div className="space-y-6">
               {Object.entries(materialsByCategory).map(([category, categoryMaterials]) => (
                 <div key={category}>
-                  <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">
-                    {category}
-                  </h4>
+                  <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">{category}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {categoryMaterials
-                      .filter(m => formData.availableMaterialIds.includes(m.id))
-                      .map((material) => (
-                        <button
-                          key={material.id}
-                          type="button"
-                          onClick={() => toggleRecommendedMaterial(material.id)}
-                          className={`p-3 border rounded-lg text-left transition-all ${
-                            formData.recommendedMaterialIds.includes(material.id)
-                              ? "border-krearte-black bg-krearte-black text-krearte-white"
-                              : "border-krearte-gray-200 hover:border-krearte-black"
-                          }`}
-                        >
-                          <p className="font-normal text-sm">{material.name}</p>
-                          <p className={`text-xs ${
-                            formData.recommendedMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
-                          }`}>
-                            Rp {material.pricePerM2.toLocaleString()}/m²
-                          </p>
-                        </button>
-                      ))}
+                    {categoryMaterials.filter(m => formData.availableMaterialIds.includes(m.id)).map((material) => (
+                      <button key={material.id} type="button" onClick={() => toggleRecommendedMaterial(material.id)} className={`p-3 border rounded-lg text-left transition-all ${formData.recommendedMaterialIds.includes(material.id) ? "border-krearte-black bg-krearte-black text-krearte-white" : "border-krearte-gray-200 hover:border-krearte-black"}`}>
+                        <p className="font-normal text-sm">{material.name}</p>
+                        <p className={`text-xs ${formData.recommendedMaterialIds.includes(material.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>Rp {material.pricePerM2.toLocaleString()}/m²</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
-
-            {/* Recommended Summary */}
-            {formData.recommendedMaterialIds.length > 0 && (
-              <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
-                <p className="text-sm font-medium text-krearte-black mb-3">
-                  Recommended ({formData.recommendedMaterialIds.length}):
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {materials
-                    .filter(m => formData.recommendedMaterialIds.includes(m.id))
-                    .map((material) => (
-                      <span
-                        key={material.id}
-                        className="inline-flex items-center gap-2 px-3 py-1 bg-krearte-black text-krearte-white text-xs rounded-full"
-                      >
-                        {material.name}
-                        <button
-                          type="button"
-                          onClick={() => toggleRecommendedMaterial(material.id)}
-                          className="hover:text-krearte-gray-300"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* Services / Add-Ons Section */}
+        {/* Services / Add-Ons */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6 mt-6">
-          <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
-            Available Services / Add-Ons
-            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-              {services.length}
-            </span>
-          </h2>
-          <p className="text-sm font-light text-krearte-gray-600 mb-6">
-            Pilih jasa/add-on yang tersedia untuk product ini (opsional, bisa dicentang terpisah dari material fisik)
-          </p>
+          <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">Available Services / Add-Ons <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{services.length}</span></h2>
+          <p className="text-sm font-light text-krearte-gray-600 mb-6">Pilih jasa/add-on yang tersedia untuk product ini (opsional).</p>
           
           {loadingMaterials ? (
-            <div className="text-center py-8">
-              <div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" />
-              <p className="text-sm text-krearte-gray-500">Loading services...</p>
-            </div>
+            <div className="text-center py-8"><div className="animate-spin w-6 h-6 border-2 border-krearte-black border-t-transparent rounded-full mx-auto mb-2" /><p className="text-sm text-krearte-gray-500">Loading services...</p></div>
           ) : services.length === 0 ? (
-            <div className="p-4 bg-krearte-gray-50 border border-krearte-gray-200 rounded-lg">
-              <p className="text-sm text-krearte-gray-500">
-                ℹ️ No services/add-ons configured yet. Add them in Materials section with categories like "Jasa", "Service", "Add-On", "Print", or "Design".
-              </p>
-            </div>
+            <div className="p-4 bg-krearte-gray-50 border border-krearte-gray-200 rounded-lg"><p className="text-sm text-krearte-gray-500">ℹ️ No services/add-ons configured yet.</p></div>
           ) : (
             <div className="space-y-6">
               {(() => {
-                const servicesByCategory = services.reduce((acc, service) => {
-                  const category = service.category || 'Other';
-                  if (!acc[category]) acc[category] = [];
-                  acc[category].push(service);
-                  return acc;
-                }, {} as Record<string, Material[]>);
-
+                const servicesByCategory = services.reduce((acc, service) => { const cat = service.category || 'Other'; if (!acc[cat]) acc[cat] = []; acc[cat].push(service); return acc; }, {} as Record<string, Material[]>);
                 return Object.entries(servicesByCategory).map(([category, categoryServices]) => (
                   <div key={category}>
-                    <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">
-                      {category}
-                    </h4>
+                    <h4 className="text-sm font-medium text-krearte-gray-500 uppercase tracking-wider mb-3">{category}</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {categoryServices.map((service) => (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => toggleAvailableMaterial(service.id)}
-                          className={`p-3 border rounded-lg text-left transition-all ${
-                            formData.availableMaterialIds.includes(service.id)
-                              ? "border-krearte-black bg-krearte-black text-krearte-white"
-                              : "border-krearte-gray-200 hover:border-krearte-black"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="font-normal text-sm">{service.name}</p>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                              ADD-ON
-                            </span>
-                          </div>
-                          <p className={`text-xs mt-1 ${
-                            formData.availableMaterialIds.includes(service.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"
-                          }`}>
-                            {formatCurrency(service.pricePerM2)}
-                          </p>
+                        <button key={service.id} type="button" onClick={() => toggleAvailableMaterial(service.id)} className={`p-3 border rounded-lg text-left transition-all ${formData.availableMaterialIds.includes(service.id) ? "border-krearte-black bg-krearte-black text-krearte-white" : "border-krearte-gray-200 hover:border-krearte-black"}`}>
+                          <div className="flex items-center justify-between"><p className="font-normal text-sm">{service.name}</p><span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">ADD-ON</span></div>
+                          <p className={`text-xs mt-1 ${formData.availableMaterialIds.includes(service.id) ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>{formatCurrency(service.pricePerM2)}</p>
                         </button>
                       ))}
                     </div>
@@ -892,22 +595,9 @@ export default function NewProductPage() {
 
         {/* Submit Button */}
         <div className="flex items-center justify-end gap-4 pt-4 border-t border-krearte-gray-200">
-          <Link
-            href="/admin/products"
-            className="px-6 py-3 text-krearte-black font-medium hover:text-krearte-gray-600"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={loading || uploading || loadingMaterials}
-            className={`px-8 py-3 rounded-full text-sm font-medium transition-colors ${
-              loading || uploading || loadingMaterials
-                ? "bg-krearte-gray-300 cursor-not-allowed"
-                : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
-            }`}
-          >
-            {loading ? "Creating..." : uploading ? `Uploading ${uploadProgress}%...` : loadingMaterials ? "Loading..." : "Create Product"}
+          <Link href="/admin/products" className="px-6 py-3 text-krearte-black font-medium hover:text-krearte-gray-600">Cancel</Link>
+          <button type="submit" disabled={loading || uploading || loadingMaterials} className={`px-8 py-3 rounded-full text-sm font-medium transition-colors ${loading || uploading || loadingMaterials ? "bg-krearte-gray-300 cursor-not-allowed" : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"}`}>
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : uploading ? "Uploading..." : loadingMaterials ? "Loading..." : "Create Product"}
           </button>
         </div>
       </form>
