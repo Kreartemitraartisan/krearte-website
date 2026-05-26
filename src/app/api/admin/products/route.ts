@@ -9,14 +9,16 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ HELPER: Check if material is physical
+// ✅ HELPER: Check if material is physical (FIXED)
 // =========================
 function isPhysicalMaterial(material: any): boolean {
   const category = (material.category || "").toLowerCase();
   const name = (material.name || "").toLowerCase();
-  const price = material.pricePerM2 || 0;
+  
+  // ✅ FIX: Force parsing ke Number biar tidak gagal karena tipe data string
+  const price = Number(material.pricePerM2) || 0;
 
-  // Exclude services & add-ons
+  // ❌ Keyword yang HARUS di-exclude (Jasa, Sample, dll)
   const excludedKeywords = [
     "service", "add-on", "addon", "jasa", 
     "print", "design", "redesign", "sample",
@@ -27,14 +29,24 @@ function isPhysicalMaterial(material: any): boolean {
     category.includes(keyword) || name.includes(keyword)
   );
 
-  // Minimum price threshold (Rp 300.000)
-  const MIN_MATERIAL_PRICE = 300000;
+  // ✅ FIX: Turunkan threshold ke 100.000 (aman untuk material fisik termurah)
+  const MIN_MATERIAL_PRICE = 100000;
   
-  return price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
+  const isValid = price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
+
+  // ✅ DEBUG LOG: Lihat di Vercel Logs kenapa material lolos/gagal
+  console.log(`[Material Filter] "${material.name}"`);
+  console.log(`   - Price: Rp ${price.toLocaleString('id-ID')} (Original: ${material.pricePerM2})`);
+  console.log(`   - Category: "${category}"`);
+  console.log(`   - Has Excluded Keyword: ${hasExcludedKeyword}`);
+  console.log(`   - Valid: ${isValid ? '✅ YES' : '❌ NO'}`);
+  console.log('---');
+
+  return isValid;
 }
 
 // =========================
-// ✅ GET - Fetch all products
+// ✅ GET - Fetch all products WITH price range calculation
 // =========================
 export async function GET() {
   try {
@@ -54,6 +66,7 @@ export async function GET() {
         try {
           const materialIds = product.availableMaterialIds || [];
 
+          // If no materials, use base price
           if (!materialIds || materialIds.length === 0) {
             return {
               ...product,
@@ -74,9 +87,13 @@ export async function GET() {
             },
           });
 
+          console.log(`[Product: ${product.name}] Found ${materials.length} materials in DB`);
+
           // Filter only physical materials
           const physicalMaterials = materials.filter(isPhysicalMaterial);
+          console.log(`[Product: ${product.name}] Physical materials count: ${physicalMaterials.length}`);
 
+          // If no physical materials found, fallback to base price
           if (physicalMaterials.length === 0) {
             return {
               ...product,
@@ -87,7 +104,10 @@ export async function GET() {
 
           // Calculate price range (pricePerM2 + waste)
           const prices = physicalMaterials.map((m) => {
-            return (m.pricePerM2 || 0) + (m.waste || 0);
+            // ✅ FIX: Force Number parsing untuk kalkulasi
+            const basePrice = Number(m.pricePerM2) || 0;
+            const wasteCost = Number(m.waste) || 0;
+            return basePrice + wasteCost;
           });
 
           const minPrice = Math.min(...prices);
@@ -108,12 +128,13 @@ export async function GET() {
           return {
             ...product,
             priceRange: { min: product.price || 0, max: product.price || 0 },
+            physicalMaterialCount: 0,
           };
         }
       })
     );
 
-    console.log(`[Products API] Successfully processed ${productsWithPriceRange.length} products`);
+    console.log(`[Products API] ✅ Successfully processed ${productsWithPriceRange.length} products`);
 
     return NextResponse.json({
       success: true,
@@ -159,6 +180,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // ✅ Validasi required fields
     if (!body.name?.trim() || !body.slug?.trim() || body.price === undefined || body.price === null) {
       return NextResponse.json(
         { success: false, error: "Missing required fields: name, slug, price" },
