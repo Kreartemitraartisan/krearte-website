@@ -407,6 +407,27 @@ export default function EditProductPage() {
               </p>
             </div>
 
+            {/* ✅ Collection Category - Pilihan Manual */}
+            <div>
+              <label className="block text-sm font-normal mb-2">
+                Collection Category
+                <span className="text-krearte-gray-400 font-light ml-1">(Optional)</span>
+              </label>
+              <select
+                name="category_slug"
+                value={formData.category_slug || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black bg-white"
+              >
+                <option value="">Select a category...</option>
+                <option value="wallcovering">Wallcovering</option>
+                <option value="designer-collection">Designer Collection</option>
+              </select>
+              <p className="text-xs text-krearte-gray-500 mt-1">
+                Used for filtering in collection pages
+              </p>
+            </div>
+
             {/* ✅ Category (Legacy) - Load dari DATABASE */}
             <div>
               <label className="block text-sm font-normal mb-2">Category (Legacy) *</label>
@@ -430,27 +451,6 @@ export default function EditProductPage() {
               </select>
               <p className="text-xs text-krearte-gray-500 mt-1">
                 Category dari database (Chinoiserie, Floral, Nature, dll)
-              </p>
-            </div>
-
-            {/* ✅ Collection Category - Pilihan Manual */}
-            <div>
-              <label className="block text-sm font-normal mb-2">
-                Collection Category
-                <span className="text-krearte-gray-400 font-light ml-1">(Optional)</span>
-              </label>
-              <select
-                name="category_slug"
-                value={formData.category_slug || ""}
-                onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black bg-white"
-              >
-                <option value="">Select a category...</option>
-                <option value="wallcovering">Wallcovering</option>
-                <option value="designer-collection">Designer Collection</option>
-              </select>
-              <p className="text-xs text-krearte-gray-500 mt-1">
-                Used for filtering in collection pages
               </p>
             </div>
 
