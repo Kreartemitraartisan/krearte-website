@@ -10,38 +10,41 @@ export async function GET(request: Request) {
 
     const supabase = createAdminClient();
 
-    // ✅ STEP 1: Fetch categories dengan error handling yang robust
     console.log('🔍 Fetching categories with filters:', { collectionType, parentId });
 
+    // ✅ FIX: Gunakan nama tabel 'Category' (sesuai Prisma schema)
     let categoryQuery = supabase
-      .from('categories')
+      .from('Category')  // ✅ Capital C, singular
       .select('*')
-      .eq('is_active', true);
+      .eq('isActive', true);  // ✅ camelCase
 
     if (collectionType) {
-      categoryQuery = categoryQuery.eq('collection_type', collectionType);
+      // ✅ FIX: collectionType (bukan collection_type)
+      categoryQuery = categoryQuery.eq('collectionType', collectionType);
     }
 
-    // Handle parentId filtering (null, empty string, or valid ID)
+    // Handle parentId filtering
     if (parentId !== null && parentId !== undefined) {
       if (parentId === 'null' || parentId === '') {
-        categoryQuery = categoryQuery.is('parent_id', null);
+        // ✅ FIX: parentId (bukan parent_id)
+        categoryQuery = categoryQuery.is('parentId', null);
       } else {
-        categoryQuery = categoryQuery.eq('parent_id', parentId);
+        categoryQuery = categoryQuery.eq('parentId', parentId);
       }
     }
 
-    categoryQuery = categoryQuery.order('sort_order', { ascending: true });
+    // ✅ FIX: sortOrder (bukan sort_order)
+    categoryQuery = categoryQuery.order('sortOrder', { ascending: true });
 
     const { data: categories, error: categoriesError } = await categoryQuery;
 
-    // ✅ Handle error: Jika tabel tidak ada atau query gagal, return empty array (bukan 500)
+    // Handle error
     if (categoriesError) {
-      console.error('⚠️ Supabase categories query error (non-critical):', categoriesError);
+      console.error('⚠️ Supabase categories query error:', categoriesError);
       
-      // Jika error karena tabel tidak ditemukan, return empty agar frontend tidak crash
-      if (categoriesError.code === '42P01') { // PostgreSQL: relation does not exist
-        console.warn('⚠️ Table "categories" not found. Returning empty list.');
+      // Jika tabel tidak ditemukan
+      if (categoriesError.code === '42P01') {
+        console.warn('⚠️ Table "Category" not found. Returning empty list.');
         return NextResponse.json({
           success: true,
           categories: [],
@@ -50,7 +53,6 @@ export async function GET(request: Request) {
         });
       }
       
-      // Untuk error lain, tetap return empty tapi log detailnya
       return NextResponse.json({
         success: true,
         categories: [],
@@ -58,12 +60,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // ✅ STEP 2: Fetch products (TANPA filter is_active)
+    // ✅ Fetch products for price calculation (tabel Product dengan capital P)
     console.log('🔍 Fetching products for price calculation...');
     
     let productsQuery = supabase
-      .from('Product')
-      .select('id, slug, name, price, category_slug, "collectionType"');
+      .from('Product')  // ✅ Capital P, sesuai Prisma @@map("Product")
+      .select('id, slug, name, price, category_slug, collectionType');  // ✅ camelCase
 
     if (collectionType) {
       productsQuery = productsQuery.eq('collectionType', collectionType);
@@ -73,10 +75,9 @@ export async function GET(request: Request) {
 
     if (productsError) {
       console.error('⚠️ Supabase products query warning:', productsError);
-      // Lanjutkan saja dengan products kosong, kategori tetap bisa tampil
     }
 
-    // ✅ STEP 3: Group products by category_slug
+    // ✅ Group products by category_slug
     const productsByCategory = new Map<string, any[]>();
     
     if (allProducts && Array.isArray(allProducts)) {
@@ -94,7 +95,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // ✅ STEP 4: Calculate price range per category
+    // ✅ Calculate price range per category
     const categoriesWithPrice = (categories || []).map((cat: any) => {
       const products = productsByCategory.get(cat.slug) || [];
       
@@ -125,16 +126,13 @@ export async function GET(request: Request) {
     });
 
   } catch (error: any) {
-    // ✅ FINAL SAFETY NET: Catch semua error tak terduga
     console.error('❌ CRITICAL: Unhandled error in categories API:', error);
     
-    // Return success: true dengan data kosong agar frontend TETAP BISA RENDER
-    // Jangan return 500 kecuali benar-benar critical
     return NextResponse.json({
-      success: true, // ✅ Ubah ke true supaya frontend tidak menampilkan error UI
+      success: true,
       categories: [],
       count: 0,
       message: 'Categories loaded with fallback data'
-    }, { status: 200 }); // ✅ Status 200, bukan 500
+    }, { status: 200 });
   }
 }
