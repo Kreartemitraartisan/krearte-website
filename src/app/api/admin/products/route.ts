@@ -9,67 +9,52 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ HELPER: Check if material is physical (with debug logs)
+// ✅ HELPER: Check if material is physical
 // =========================
 function isPhysicalMaterial(material: any): boolean {
   const category = (material.category || "").toLowerCase();
   const name = (material.name || "").toLowerCase();
   const price = material.pricePerM2 || 0;
 
-  // ❌ Daftar kata yang HARUS di-exclude
+  // Exclude services & add-ons
   const excludedKeywords = [
     "service", "add-on", "addon", "jasa", 
     "print", "design", "redesign", "sample",
-    "custom", "fee", "biaya", "ongkir"
+    "custom", "fee", "biaya"
   ];
 
-  // Check jika ada keyword yang di-exclude
   const hasExcludedKeyword = excludedKeywords.some(keyword => 
     category.includes(keyword) || name.includes(keyword)
   );
 
-  // Minimum price threshold (material termurah Rp 300.000)
+  // Minimum price threshold (Rp 300.000)
   const MIN_MATERIAL_PRICE = 300000;
-  const hasValidPrice = price >= MIN_MATERIAL_PRICE;
-
-  // ✅ LOG untuk debugging
-  console.log(` Material Check: "${material.name}"`);
-  console.log(`   - Category: "${category}"`);
-  console.log(`   - Price: Rp ${price.toLocaleString('id-ID')}`);
-  console.log(`   - Has excluded keyword: ${hasExcludedKeyword}`);
-  console.log(`   - Has valid price (>= Rp 300.000): ${hasValidPrice}`);
-  console.log(`   - Result: ${hasValidPrice && !hasExcludedKeyword ? '✅ INCLUDE' : '❌ EXCLUDE'}`);
-  console.log('---');
-
-  return hasValidPrice && !hasExcludedKeyword;
+  
+  return price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
 }
 
 // =========================
-// ✅ GET - Fetch all products WITH detailed logging
+// ✅ GET - Fetch all products
 // =========================
 export async function GET() {
   try {
-    console.log('🚀 FETCHING ALL PRODUCTS...');
-    
+    console.log('🚀 [Products API] Fetching products...');
+
+    // Fetch all products
     const products = await prisma.product.findMany({
       orderBy: { createdAt: "desc" },
       include: { sizes: true },
     });
 
-    console.log(`📦 Found ${products.length} products`);
-    console.log('===========================================');
+    console.log(`[Products API] Found ${products.length} products`);
 
+    // Process each product to calculate price range
     const productsWithPriceRange = await Promise.all(
       products.map(async (product) => {
         try {
-          console.log(`\n🔍 Processing product: "${product.name}"`);
-          console.log(`   - ID: ${product.id}`);
-          console.log(`   - Base Price: Rp ${product.price?.toLocaleString('id-ID')}`);
-          
           const materialIds = product.availableMaterialIds || [];
 
           if (!materialIds || materialIds.length === 0) {
-            console.log(`   ⚠️ No materials found, using base price`);
             return {
               ...product,
               priceRange: { min: product.price || 0, max: product.price || 0 },
@@ -77,9 +62,7 @@ export async function GET() {
             };
           }
 
-          console.log(`   📦 Material IDs: ${materialIds.length} materials`);
-
-          // Fetch materials
+          // Fetch materials for this product
           const materials = await prisma.material.findMany({
             where: { id: { in: materialIds } },
             select: { 
@@ -91,23 +74,10 @@ export async function GET() {
             },
           });
 
-          console.log(`   ✅ Fetched ${materials.length} materials from database`);
-          console.log('   Materials list:');
-          materials.forEach(m => {
-            console.log(`     • ${m.name} (Rp ${(m.pricePerM2 || 0).toLocaleString('id-ID')})`);
-          });
-
-          // Filter physical materials
-          console.log('\n   🔍 Filtering physical materials...');
+          // Filter only physical materials
           const physicalMaterials = materials.filter(isPhysicalMaterial);
 
-          console.log(`\n   📊 Summary for "${product.name}":`);
-          console.log(`      Total materials: ${materials.length}`);
-          console.log(`      Physical materials: ${physicalMaterials.length}`);
-          console.log(`      Excluded (services/add-ons): ${materials.length - physicalMaterials.length}`);
-
           if (physicalMaterials.length === 0) {
-            console.log(`   ⚠️ No physical materials found, using base price`);
             return {
               ...product,
               priceRange: { min: product.price || 0, max: product.price || 0 },
@@ -115,20 +85,13 @@ export async function GET() {
             };
           }
 
-          // Calculate price range
+          // Calculate price range (pricePerM2 + waste)
           const prices = physicalMaterials.map((m) => {
-            const basePrice = m.pricePerM2 || 0;
-            const wasteCost = m.waste || 0;
-            const total = basePrice + wasteCost;
-            console.log(`   💰 ${m.name}: Rp ${basePrice.toLocaleString()} + Rp ${wasteCost.toLocaleString()} (waste) = Rp ${total.toLocaleString()}`);
-            return total;
+            return (m.pricePerM2 || 0) + (m.waste || 0);
           });
 
           const minPrice = Math.min(...prices);
           const maxPrice = Math.max(...prices);
-
-          console.log(`\n   ✅ FINAL PRICE RANGE: Rp ${minPrice.toLocaleString('id-ID')} - Rp ${maxPrice.toLocaleString('id-ID')}`);
-          console.log('===========================================\n');
 
           return {
             ...product,
@@ -140,7 +103,8 @@ export async function GET() {
             totalMaterialCount: materials.length,
           };
         } catch (err) {
-          console.error(`❌ Error calculating price for product ${product.id}:`, err);
+          console.error(`[Products API] Error processing product ${product.id}:`, err);
+          // Return product with base price on error
           return {
             ...product,
             priceRange: { min: product.price || 0, max: product.price || 0 },
@@ -149,22 +113,25 @@ export async function GET() {
       })
     );
 
-    console.log(`\n🎉 Products API Response:`);
-    console.log(`   - Total products: ${productsWithPriceRange.length}`);
-    console.log(`   - Sample price ranges:`);
-    productsWithPriceRange.slice(0, 3).forEach(p => {
-      console.log(`     • ${p.name}: Rp ${p.priceRange?.min?.toLocaleString()} - Rp ${p.priceRange?.max?.toLocaleString()}`);
-    });
+    console.log(`[Products API] Successfully processed ${productsWithPriceRange.length} products`);
 
     return NextResponse.json({
       success: true,
       products: productsWithPriceRange,
       count: productsWithPriceRange.length,
     });
-  } catch (error) {
-    console.error("❌ GET PRODUCTS ERROR:", error);
+
+  } catch (error: any) {
+    console.error("❌ [Products API] GET ERROR:", error);
+    console.error("[Products API] Error details:", error?.message);
+    console.error("[Products API] Stack:", error?.stack);
+    
     return NextResponse.json(
-      { success: false, error: "Failed to fetch products" },
+      { 
+        success: false, 
+        error: "Failed to fetch products",
+        details: process.env.NODE_ENV === "development" ? error?.message : undefined
+      },
       { status: 500 }
     );
   }
@@ -175,12 +142,9 @@ export async function GET() {
 // =========================
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 Creating new product...');
-    
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      console.log('❌ Unauthorized access');
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -190,15 +154,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || user.role !== "admin") {
-      console.log('❌ Forbidden - not admin');
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();
-    console.log('📦 Request body:', JSON.stringify(body, null, 2));
 
     if (!body.name?.trim() || !body.slug?.trim() || body.price === undefined || body.price === null) {
-      console.log('❌ Missing required fields');
       return NextResponse.json(
         { success: false, error: "Missing required fields: name, slug, price" },
         { status: 400 }
@@ -222,11 +183,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    console.log(`✅ Product created successfully: ${product.id}`);
-
     return NextResponse.json({ success: true, product }, { status: 201 });
-  } catch (error) {
-    console.error("❌ CREATE PRODUCT ERROR:", error);
+  } catch (error: any) {
+    console.error("❌ [Products API] POST ERROR:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create product" },
       { status: 500 }
