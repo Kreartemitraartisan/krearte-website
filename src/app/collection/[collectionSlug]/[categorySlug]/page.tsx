@@ -18,7 +18,7 @@ interface Product {
   category_slug: string | null;
   collectionType: string;
   availableMaterialIds: string[];
-  priceRange?: { min: number; max: number };
+  priceRange?: { min: number; max: number } | null;
 }
 
 interface Category {
@@ -31,10 +31,35 @@ interface Category {
   isActive: boolean;
 }
 
-interface MaterialPrice {
+interface MaterialData {
   id: string;
   name: string;
+  category: string;
   pricePerM2: number;
+  waste: number;
+}
+
+// ✅ HELPER: Check if material is physical (exclude jasa/service)
+function isPhysicalMaterial(material: MaterialData): boolean {
+  const category = (material.category || "").toLowerCase();
+  const name = (material.name || "").toLowerCase();
+  const price = Number(material.pricePerM2) || 0;
+
+  // Exclude keywords
+  const excludedKeywords = [
+    "service", "add-on", "addon", "jasa", 
+    "print", "design", "redesign", "sample",
+    "custom", "fee", "biaya"
+  ];
+
+  const hasExcludedKeyword = excludedKeywords.some(keyword => 
+    category.includes(keyword) || name.includes(keyword)
+  );
+
+  // Minimum price threshold (Rp 100.000)
+  const MIN_MATERIAL_PRICE = 100000;
+
+  return price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
 }
 
 export default function CategoryPage() {
@@ -54,13 +79,13 @@ export default function CategoryPage() {
       try {
         console.log('🔍 Fetching data for:', { collectionSlug, categorySlug });
 
-        // ✅ Fetch category - gunakan nama tabel & kolom yang benar (camelCase)
+        // ✅ Fetch category
         const { data: categoryData, error: catError } = await supabase
-          .from('Category')  // ✅ Capital C, singular (sesuai Prisma)
+          .from('Category')
           .select('*')
           .eq('slug', categorySlug)
-          .eq('collectionType', collectionSlug)  // ✅ camelCase
-          .eq('isActive', true)  // ✅ camelCase
+          .eq('collectionType', collectionSlug)
+          .eq('isActive', true)
           .single();
 
         if (catError) {
@@ -74,14 +99,14 @@ export default function CategoryPage() {
           console.warn('⚠️ Category not found in database');
         }
 
-        // ✅ Fetch products - filter BOTH collectionType AND category_slug
+        // ✅ Fetch products
         console.log('🔍 Fetching products for:', { collectionType: collectionSlug, category_slug: categorySlug });
         
         const { data: productsData, error: prodError } = await supabase
-          .from('Product')  // ✅ Capital P (sesuai Prisma @@map("Product"))
+          .from('Product')
           .select('id, name, slug, description, price, images, category_slug, collectionType, availableMaterialIds')
-          .eq('collectionType', collectionSlug)  // ✅ Filter collectionType
-          .eq('category_slug', categorySlug)     // ✅ Exact match (bukan ilike)
+          .eq('collectionType', collectionSlug)
+          .eq('category_slug', categorySlug)
           .order('createdAt', { ascending: false });
 
         if (prodError) {
@@ -91,35 +116,55 @@ export default function CategoryPage() {
         console.log('📦 Products found:', productsData?.length || 0);
 
         if (productsData && productsData.length > 0) {
-          // ✅ Fetch materials untuk price range
+          // ✅ Fetch materials untuk price range (HANYA MATERIAL FISIS)
           const productsWithPrices = await Promise.all(
             productsData.map(async (product) => {
               const materialIds = product.availableMaterialIds || [];
               
               if (materialIds.length > 0) {
-                // ✅ Fetch materials dengan nama tabel & kolom yang benar
+                // Fetch materials dengan detail lengkap
                 const { data: materialsData } = await supabase
-                  .from('Material')  // ✅ Capital M, singular
-                  .select('id, name, pricePerM2')  // ✅ camelCase
+                  .from('Material')
+                  .select('id, name, category, pricePerM2, waste')
                   .in('id', materialIds);
 
                 if (materialsData && materialsData.length > 0) {
-                  const prices = materialsData
-                    .map(m => m.pricePerM2)
-                    .filter((p): p is number => typeof p === 'number' && p > 0);
+                  console.log(`[Product: ${product.name}] Found ${materialsData.length} materials`);
 
-                  if (prices.length > 0) {
+                  // ✅ FILTER: Hanya material fisik (exclude jasa/service)
+                  const physicalMaterials = materialsData.filter((m: MaterialData) => {
+                    const isValid = isPhysicalMaterial(m);
+                    console.log(`  - ${m.name}: Rp ${Number(m.pricePerM2).toLocaleString('id-ID')} - ${isValid ? '✅ INCLUDE' : '❌ EXCLUDE'}`);
+                    return isValid;
+                  });
+
+                  console.log(`[Product: ${product.name}] Physical materials: ${physicalMaterials.length}`);
+
+                  // Hitung price range dari physical materials only
+                  if (physicalMaterials.length > 0) {
+                    const prices = physicalMaterials.map(m => Number(m.pricePerM2) || 0);
+                    const minPrice = Math.min(...prices);
+                    const maxPrice = Math.max(...prices);
+
+                    console.log(`[Product: ${product.name}] Price range: Rp ${minPrice.toLocaleString('id-ID')} - Rp ${maxPrice.toLocaleString('id-ID')}`);
+
                     return {
                       ...product,
                       priceRange: {
-                        min: Math.min(...prices),
-                        max: Math.max(...prices)
+                        min: minPrice,
+                        max: maxPrice
                       }
                     };
                   }
                 }
               }
-              return product;
+              
+              // Fallback: no price range
+              console.log(`[Product: ${product.name}] No valid materials found`);
+              return {
+                ...product,
+                priceRange: null
+              };
             })
           );
 
@@ -218,7 +263,7 @@ export default function CategoryPage() {
           <Link href="/" className="hover:text-krearte-black">Home</Link>
           <span className="mx-2">/</span>
           <Link href={`/collection/${collectionSlug}`} className="hover:text-krearte-black capitalize">
-            {collectionSlug.replace('-', ' ')}
+            {collectionSlug.replace(/-/g, ' ')}
           </Link>
           <span className="mx-2">/</span>
           <span className="text-krearte-black font-medium">{category.name}</span>
