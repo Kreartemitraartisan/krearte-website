@@ -16,13 +16,16 @@ function isPhysicalMaterial(material: any): boolean {
   const name = (material.name || "").toLowerCase();
 
   // ❌ Exclude services & add-ons
-  const excludedCategories = ["service", "add-on", "addon", "jasa", "print", "design", "redesign"];
+  const excludedKeywords = [
+    "service", "add-on", "addon", "jasa", 
+    "print", "design", "redesign", "sample"
+  ];
   
-  if (excludedCategories.some(ex => category.includes(ex) || name.includes(ex))) {
+  if (excludedKeywords.some(keyword => category.includes(keyword) || name.includes(keyword))) {
     return false;
   }
 
-  // ✅ Include if has valid price and not excluded
+  // ✅ Include if has valid price
   return material.pricePerM2 > 0;
 }
 
@@ -31,13 +34,10 @@ function isPhysicalMaterial(material: any): boolean {
 // =========================
 export async function GET() {
   try {
-    // Fetch all products with their material relations
+    // Fetch all products
     const products = await prisma.product.findMany({
       orderBy: { createdAt: "desc" },
-      include: { 
-        sizes: true,
-        // Include materials for price calculation
-      },
+      include: { sizes: true },
     });
 
     // ✅ Calculate price range for each product (only physical materials)
@@ -60,16 +60,13 @@ export async function GET() {
 
           // ✅ Fetch materials for this product
           const materials = await prisma.material.findMany({
-            where: {
-              id: { in: materialIds },
-            },
+            where: { id: { in: materialIds } },
             select: {
               id: true,
               name: true,
               category: true,
               pricePerM2: true,
               waste: true,
-              width: true,
             },
           });
 
@@ -85,12 +82,10 @@ export async function GET() {
                 max: product.price || 0,
               },
               physicalMaterialCount: 0,
-              warning: "No physical materials found",
             };
           }
 
           // ✅ Calculate price range from physical materials only
-          // Price = pricePerM2 + waste cost (if any)
           const prices = physicalMaterials.map((m) => {
             const basePrice = m.pricePerM2 || 0;
             const wasteCost = m.waste || 0;
@@ -111,7 +106,6 @@ export async function GET() {
           };
         } catch (err) {
           console.error(`Error calculating price for product ${product.id}:`, err);
-          // Fallback to base price on error
           return {
             ...product,
             priceRange: {
@@ -130,7 +124,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("❌ GET PRODUCTS ERROR:", error);
-
     return NextResponse.json(
       { success: false, error: "Failed to fetch products" },
       { status: 500 }
@@ -167,12 +160,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // ✅ Validasi required fields
-    if (
-      !body.name?.trim() || 
-      !body.slug?.trim() || 
-      body.price === undefined || 
-      body.price === null
-    ) {
+    if (!body.name?.trim() || !body.slug?.trim() || body.price === undefined || body.price === null) {
       return NextResponse.json(
         { success: false, error: "Missing required fields: name, slug, price" },
         { status: 400 }
@@ -184,7 +172,7 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         slug: body.slug.trim(),
         category: body.category || "wallcovering",
-        category_slug: body.category_slug || null, // ✅ Support collection category
+        category_slug: body.category_slug || null,
         price: Number(body.price) || 0,
         stock: Number(body.stock) || 0,
         description: body.description?.trim() || null,
@@ -196,15 +184,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      product,
-    }, { status: 201 });
+    return NextResponse.json({ success: true, product }, { status: 201 });
 
   } catch (error) {
     console.error("❌ CREATE PRODUCT ERROR:", error);
 
-    // Handle duplicate slug error
     if (error instanceof Error && error.message.includes("Unique constraint failed")) {
       return NextResponse.json(
         { success: false, error: "Product with this slug already exists" },
@@ -220,14 +204,14 @@ export async function POST(request: NextRequest) {
 }
 
 // =========================
-// ✅ PUT - Update product
+// ✅ PUT - Update product (Next.js 15+ Compatible)
 // =========================
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await params; // ✅ Await params (Next.js 15+)
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -251,13 +235,7 @@ export async function PUT(
 
     const body = await request.json();
 
-    // ✅ Validasi required fields
-    if (
-      !body.name?.trim() || 
-      !body.slug?.trim() || 
-      body.price === undefined || 
-      body.price === null
-    ) {
+    if (!body.name?.trim() || !body.slug?.trim() || body.price === undefined || body.price === null) {
       return NextResponse.json(
         { success: false, error: "Missing required fields: name, slug, price" },
         { status: 400 }
@@ -282,10 +260,7 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      product,
-    });
+    return NextResponse.json({ success: true, product });
 
   } catch (error) {
     console.error("❌ UPDATE PRODUCT ERROR:", error);
@@ -305,14 +280,14 @@ export async function PUT(
 }
 
 // =========================
-// ✅ DELETE - Delete product
+// ✅ DELETE - Delete product (Next.js 15+ Compatible)
 // =========================
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await params; // ✅ Await params (Next.js 15+)
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
@@ -347,8 +322,6 @@ export async function DELETE(
       );
     }
 
-    // Soft delete: don't actually delete, just mark as inactive or update stock to 0
-    // Or if you really want to delete, make sure no order items reference it
     if (existingProduct.orderItems.length > 0) {
       return NextResponse.json(
         { success: false, error: "Cannot delete product with existing orders" },
@@ -356,9 +329,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.product.delete({
-      where: { id },
-    });
+    await prisma.product.delete({ where: { id } });
 
     return NextResponse.json({
       success: true,
