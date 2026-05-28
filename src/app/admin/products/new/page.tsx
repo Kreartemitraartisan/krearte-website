@@ -24,7 +24,7 @@ interface Category {
   slug: string;
   description: string | null;
   image_url: string | null;
-  collection_type: string;
+  collectionType: string;
 }
 
 export default function NewProductPage() {
@@ -43,9 +43,8 @@ export default function NewProductPage() {
     name: "",
     slug: "",
     description: "",
-    category: "", // ✅ Category dari database (Chinoiserie, Floral, dll)
-    category_slug: "", // ✅ Collection Category (wallcovering/designer-collection)
-    collectionType: "wallcovering",
+    collectionType: "wallcovering", // wallcovering atau designer
+    category_slug: "", // chinoiserie, zen, floral, animals, dll (untuk URL filter)
     is25DEligible: false,
     stock: 0,
     availableMaterialIds: [] as string[],
@@ -58,13 +57,18 @@ export default function NewProductPage() {
   useEffect(() => {
     async function fetchData() {
       try {
+        console.log('🔍 Fetching materials and categories...');
+        
         const [materialsRes, categoriesRes] = await Promise.all([
           fetch("/api/materials"),
-          fetch("/api/categories"), // ✅ Fetch ALL categories
+          fetch("/api/categories"),
         ]);
 
         const materialsData = await materialsRes.json();
         const categoriesData = await categoriesRes.json();
+        
+        console.log('📦 Materials API:', materialsData);
+        console.log('📦 Categories API:', categoriesData);
         
         if (materialsData.success) {
           setMaterials(materialsData.materials || []);
@@ -72,9 +76,11 @@ export default function NewProductPage() {
         
         if (categoriesData.success) {
           setCategories(categoriesData.categories || []);
+        } else {
+          console.warn('⚠️ Categories API tidak return data');
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("❌ Error fetching data:", error);
       } finally {
         setLoadingMaterials(false);
         setLoadingCategories(false);
@@ -230,8 +236,14 @@ export default function NewProductPage() {
     setLoading(true);
 
     try {
-      if (!formData.name.trim() || !formData.slug.trim() || !formData.category) {
-        throw new Error("Name, Slug, and Category are required");
+      console.log('📝 Form data sebelum submit:', formData);
+      
+      if (!formData.name.trim() || !formData.slug.trim()) {
+        throw new Error("Name and Slug are required");
+      }
+
+      if (!formData.category_slug) {
+        throw new Error("Category Slug (untuk filtering) harus dipilih");
       }
       
       const imagePayload = images.length > 0 
@@ -242,18 +254,18 @@ export default function NewProductPage() {
         name: formData.name.trim(),
         slug: formData.slug.trim(),
         description: formData.description?.trim() || "",
-        category: formData.category, // ✅ Category dari DB (Chinoiserie, dll)
-        category_slug: formData.category_slug, // ✅ Collection Category (wallcovering/designer)
-        price: 0,
-        images: imagePayload,
+        category: formData.collectionType === 'wallcovering' ? 'wallcovering' : 'designer', // Fallback
+        category_slug: formData.category_slug, // ✅ PENTING: chinoiserie, zen, floral, dll
         collectionType: formData.collectionType || "wallcovering",
         is25DEligible: Boolean(formData.is25DEligible),
         stock: Number(formData.stock) || 0,
+        price: 0, // Base price (akan dihitung dari materials)
+        images: imagePayload,
         availableMaterialIds: formData.availableMaterialIds || [],
         recommendedMaterialIds: formData.recommendedMaterialIds || [],
       };
 
-      console.log("📤 Creating product:", payload);
+      console.log("📤 Creating product with payload:", payload);
 
       const response = await fetch("/api/admin/products", {
         method: "POST",
@@ -262,6 +274,7 @@ export default function NewProductPage() {
       });
 
       const result = await response.json();
+      console.log('📥 API Response:', result);
 
       if (!response.ok) {
         throw new Error(result.error || result.message || `HTTP ${response.status}`);
@@ -271,7 +284,7 @@ export default function NewProductPage() {
       router.push("/admin/products");
       router.refresh();
     } catch (err: any) {
-      console.error("💥 Error:", err);
+      console.error("💥 Error creating product:", err);
       setError(err.message || "Failed to create product");
       alert(`❌ ${err.message}`);
     } finally {
@@ -332,9 +345,24 @@ export default function NewProductPage() {
               <p className="text-xs text-krearte-gray-500 mt-1">Used in URL: /product/{formData.slug || "your-slug"}</p>
             </div>
 
-            {/* ✅ Collection Type - Pilihan Manual */}
+            {/* ✅ Collection Type - Wallcovering atau Designer */}
             <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">Collection Category *</label>
+              <label className="block text-sm font-normal text-krearte-black mb-2">Collection Type *</label>
+              <select
+                name="collectionType"
+                value={formData.collectionType}
+                onChange={handleInputChange}
+                required
+                className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light bg-white"
+              >
+                <option value="wallcovering">Wallcovering</option>
+                <option value="designer">Designer Collections</option>
+              </select>
+            </div>
+
+            {/* ✅ Category Slug - Untuk Filtering URL */}
+            <div>
+              <label className="block text-sm font-normal text-krearte-black mb-2">Category Slug (Filter) *</label>
               <select
                 name="category_slug"
                 value={formData.category_slug}
@@ -342,36 +370,33 @@ export default function NewProductPage() {
                 required
                 className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light bg-white"
               >
-                <option value="">Select collection type...</option>
-                <option value="wallcovering">Wallcovering</option>
-                <option value="designer-collection">Designer Collection</option>
-              </select>
-              <p className="text-xs text-krearte-gray-500 mt-1">Main collection type for filtering</p>
-            </div>
-
-            {/* ✅ Category - Load dari Database */}
-            <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">Category (Legacy) *</label>
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light bg-white"
-                disabled={loadingCategories}
-              >
-                <option value="">Select a category...</option>
-                {loadingCategories ? (
-                  <option disabled>Loading categories...</option>
+                <option value="">Select category...</option>
+                {formData.collectionType === 'wallcovering' ? (
+                  <>
+                    <option value="chinoiserie">Chinoiserie</option>
+                    <option value="zen">Zen</option>
+                    <option value="flower-leaves">Flower & Leaves</option>
+                    <option value="animals">Animals</option>
+                    <option value="abstract">Abstract</option>
+                    <option value="geometric">Geometric</option>
+                    <option value="tropical">Tropical</option>
+                    <option value="lotus">Lotus</option>
+                    <option value="marble">Marble</option>
+                    <option value="toile-de-jouy">Toile de Jouy</option>
+                    <option value="scenery">Scenery</option>
+                    <option value="du-pavillon">Du Pavillon</option>
+                    <option value="jolly-wolly">Jolly Wolly</option>
+                  </>
                 ) : (
-                  categories.map((cat) => (
-                    <option key={cat.id} value={cat.slug}>
-                      {cat.name} {/* Chinoiserie, Floral, Abstract, dll */}
-                    </option>
-                  ))
+                  <>
+                    <option value="metallic">Metallic</option>
+                    <option value="textured">Textured</option>
+                    <option value="botanical">Botanical</option>
+                    <option value="exclusive">Exclusive</option>
+                  </>
                 )}
               </select>
-              <p className="text-xs text-krearte-gray-500 mt-1">Specific design category from database</p>
+              <p className="text-xs text-krearte-gray-500 mt-1">Untuk URL: /collection/{formData.collectionType}/{formData.category_slug || 'category'}</p>
             </div>
 
             <div>
@@ -416,45 +441,6 @@ export default function NewProductPage() {
               className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
               placeholder="Describe the design, pattern, and visual characteristics..."
             />
-          </div>
-        </div>
-
-        {/* Collection Type Buttons */}
-        <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
-          <h2 className="font-sans text-lg font-normal mb-6">Collection Type</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, collectionType: "wallcovering", is25DEligible: false }))}
-              className={`p-4 border rounded-lg text-left transition-all ${
-                formData.collectionType === "wallcovering"
-                  ? "border-krearte-black bg-krearte-black text-krearte-white"
-                  : "border-krearte-gray-200 hover:border-krearte-black"
-              }`}
-            >
-              <p className="font-normal mb-1">Wallcovering</p>
-              <p className={`text-sm ${formData.collectionType === "wallcovering" ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
-                Standard collection with PVC materials
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, collectionType: "designer" }))}
-              className={`p-4 border rounded-lg text-left transition-all ${
-                formData.collectionType === "designer"
-                  ? "border-krearte-black bg-krearte-black text-krearte-white"
-                  : "border-krearte-gray-200 hover:border-krearte-black"
-              }`}
-            >
-              <p className="font-normal mb-1 flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Designer Collections
-              </p>
-              <p className={`text-sm ${formData.collectionType === "designer" ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
-                Premium & metallic materials showcase
-              </p>
-            </button>
           </div>
         </div>
 
