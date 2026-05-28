@@ -117,8 +117,8 @@ export default function CategoryPage() {
 
         if (productsData && productsData.length > 0) {
           // ✅ Fetch materials untuk price range (HANYA MATERIAL FISIS)
-          const productsWithPrices = await Promise.all(
-            productsData.map(async (product) => {
+          const productsWithPrices: Product[] = await Promise.all(
+            productsData.map(async (product: any) => {
               const materialIds = product.availableMaterialIds || [];
               
               if (materialIds.length > 0) {
@@ -154,7 +154,7 @@ export default function CategoryPage() {
                         min: minPrice,
                         max: maxPrice
                       }
-                    };
+                    } as Product;
                   }
                 }
               }
@@ -164,7 +164,7 @@ export default function CategoryPage() {
               return {
                 ...product,
                 priceRange: null
-              };
+              } as Product;
             })
           );
 
