@@ -1,3 +1,4 @@
+// /app/api/admin/products/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
@@ -30,37 +31,29 @@ async function checkAdminAuth() {
 }
 
 // =========================
-// ✅ GET - Fetch single product (with debug logs)
+// ✅ GET - Fetch single product
 // =========================
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log(`[GET Product] Request received for ID: ${await params.then(p => p.id)}`);
-    
     const auth = await checkAdminAuth();
     if (!auth.authenticated) {
-      console.log(`[GET Product] Auth failed: ${auth.error}`);
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;
-    console.log(`[GET Product] Fetching product with ID: ${id}`);
 
     const product = await prisma.product.findUnique({
       where: { id },
-      include: { 
-        sizes: true,
-      },
+      include: { sizes: true },
     });
 
     if (!product) {
-      console.log(`[GET Product] Product not found: ${id}`);
       return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 });
     }
 
-    console.log(`[GET Product] Success: ${product.name}`);
     return NextResponse.json({ success: true, product });
   } catch (error) {
     console.error("❌ [GET Product] ERROR:", error);
@@ -69,15 +62,13 @@ export async function GET(
 }
 
 // =========================
-// ✅ PUT - Update product (with detailed logging)
+// ✅ PUT - Update product
 // =========================
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log(`[PUT Product] Update request received`);
-    
     const auth = await checkAdminAuth();
     if (!auth.authenticated) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
@@ -86,13 +77,12 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
+    // ✅ Debug log: Cek apa yang dikirim frontend
     console.log(`[PUT Product] Updating ID: ${id}`);
-    console.log(`[PUT Product] Request body keys:`, Object.keys(body));
-    console.log(`[PUT Product] category_slug value:`, body.category_slug);
+    console.log(`[PUT Product] Received category_slug:`, body.category_slug);
 
     // ✅ Validasi required fields
     if (!body.name?.trim() || !body.slug?.trim() || body.price === undefined || body.price === null) {
-      console.log(`[PUT Product] Validation failed: missing required fields`);
       return NextResponse.json({ success: false, error: "Missing required fields: name, slug, price" }, { status: 400 });
     }
 
@@ -101,8 +91,12 @@ export async function PUT(
       name: body.name.trim(),
       slug: body.slug.trim(),
       category: body.category || "wallcovering",
-      // ✅ PENTING: Pastikan category_slug tersimpan (bisa null)
+      
+      // ✅ PENTING: Handle category_slug
+      // Jika frontend mengirim undefined/null, simpan null di DB
+      // Jika frontend mengirim string (misal 'zen'), simpan string tersebut
       category_slug: body.category_slug !== undefined ? body.category_slug : null,
+      
       price: Number(body.price) || 0,
       stock: Number(body.stock) || 0,
       description: body.description?.trim() || null,
@@ -113,42 +107,16 @@ export async function PUT(
       recommendedMaterialIds: Array.isArray(body.recommendedMaterialIds) ? body.recommendedMaterialIds : [],
     };
 
-    console.log(`[PUT Product] Update data prepared:`, {
-      name: updateData.name,
-      slug: updateData.slug,
-      category: updateData.category,
-      category_slug: updateData.category_slug, // Log ini penting untuk debug
-      collectionType: updateData.collectionType,
-    });
-
-    // ✅ Handle nested sizes update (delete all + create new)
-    if (Array.isArray(body.sizes)) {
-      console.log(`[PUT Product] Updating ${body.sizes.length} sizes`);
-      updateData.sizes = {
-        deleteMany: {},
-        create: body.sizes.map((size: any) => ({
-          label: size.label?.trim() || "",
-          price: Number(size.price) || 0,
-          stock: Number(size.stock) || 0,
-        })),
-      };
-    }
-
     const product = await prisma.product.update({
       where: { id },
       data: updateData,
       include: { sizes: true },
     });
 
-    console.log(`[PUT Product] ✅ Success: ${product.name}, category_slug: ${product.category_slug}`);
+    console.log(`[PUT Product] ✅ Success: ${product.name}, saved category_slug: ${product.category_slug}`);
     return NextResponse.json({ success: true, product });
   } catch (error: any) {
     console.error("❌ [PUT Product] ERROR:", error);
-    console.error(`[PUT Product] Error details:`, {
-      message: error?.message,
-      code: error?.code,
-      meta: error?.meta,
-    });
 
     // Handle duplicate slug
     if (error?.code === "P2002") {
@@ -165,71 +133,57 @@ export async function PUT(
 }
 
 // =========================
-// ✅ DELETE - Delete product (Safe with relations check)
+// ✅ DELETE - Delete product
 // =========================
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log(`[DELETE Product] Delete request received`);
-    
     const auth = await checkAdminAuth();
     if (!auth.authenticated) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
     }
 
     const { id } = await params;
-    console.log(`[DELETE Product] Deleting ID: ${id}`);
 
     // ✅ 1. Cek apakah product ada + include relations yang valid
     const product = await prisma.product.findUnique({
       where: { id },
       include: { 
-        orderItems: true,  // ✅ Valid di schema
-        sizes: true,       // ✅ Valid di schema
-        wishlists: true,   // ✅ Valid di schema
+        orderItems: true,
+        sizes: true,
+        wishlists: true,
       },
     });
 
     if (!product) {
-      console.log(`[DELETE Product] Product not found: ${id}`);
       return NextResponse.json({ success: false, error: "Product not found" }, { status: 404 });
     }
 
     // ✅ 2. Jangan hapus kalau sudah ada yang order
     if (product.orderItems && product.orderItems.length > 0) {
-      console.log(`[DELETE Product] Blocked: Product has ${product.orderItems.length} order items`);
       return NextResponse.json(
         { success: false, error: "Cannot delete: Product has existing orders. Archive instead." },
         { status: 400 }
       );
     }
 
-    // ✅ 3. Manual cascade delete untuk safety (meski schema sudah Cascade)
+    // ✅ 3. Manual cascade delete untuk safety
     if (product.sizes?.length) {
-      console.log(`[DELETE Product] Deleting ${product.sizes.length} related sizes`);
       await prisma.productSize.deleteMany({ where: { productId: id } });
     }
     if (product.wishlists?.length) {
-      console.log(`[DELETE Product] Deleting ${product.wishlists.length} related wishlists`);
       await prisma.wishlist.deleteMany({ where: { productId: id } });
     }
 
     // ✅ 4. Hapus product utama
     await prisma.product.delete({ where: { id } });
-    console.log(`[DELETE Product] ✅ Successfully deleted: ${product.name}`);
 
     return NextResponse.json({ success: true, message: "Product deleted successfully" });
   } catch (error: any) {
     console.error("❌ [DELETE Product] ERROR:", error);
-    console.error(`[DELETE Product] Error details:`, {
-      message: error?.message,
-      code: error?.code,
-      meta: error?.meta,
-    });
 
-    // Handle Prisma error codes
     if (error?.code === "P2003") {
       return NextResponse.json(
         { success: false, error: "Cannot delete: Product is referenced by other data" },
