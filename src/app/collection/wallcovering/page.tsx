@@ -1,3 +1,4 @@
+// app/collection/wallcovering/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,13 +17,16 @@ interface Product {
   id: string;
   name: string;
   slug: string;
-  description: string;
+  description: string | null;
   category: string;
-  category_slug?: string;
+  category_slug?: string | null;
   price: number;
-  images: string[];
+  images: string[] | null;
   sizes: ProductSize[];
   collectionType: string;
+  // ✅ TAMBAHKAN: priceRange dari API admin
+  priceRange?: { min: number; max: number } | null;
+  // Legacy fields (untuk backward compatibility)
   minPrice?: number;
   maxPrice?: number;
   hasMaterialPrices?: boolean;
@@ -60,18 +64,29 @@ export default function WallcoveringCollectionPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
-  // Fetch products
+  // ✅ Fetch products dari API ADMIN (yang sudah return priceRange)
   useEffect(() => {
     async function fetchProducts() {
       try {
-        const response = await fetch("/api/products?category=wallcovering");
+        console.log('🔍 Fetching wallcovering products...');
+        
+        // ✅ Gunakan API admin yang sudah calculate priceRange
+        const response = await fetch("/api/admin/products");
         const result = await response.json();
         
+        console.log('📦 Products API response:', result);
+        
         if (result.success) {
-          setProducts(result.products || []);
+          // ✅ Filter hanya produk wallcovering
+          const wallcoveringProducts = (result.products || []).filter((p: Product) => 
+            p.collectionType?.toLowerCase() === 'wallcovering'
+          );
+          
+          console.log(`✅ Loaded ${wallcoveringProducts.length} wallcovering products`);
+          setProducts(wallcoveringProducts);
         }
       } catch (error) {
-        console.error("Error fetching products:", error);
+        console.error("❌ Error fetching products:", error);
       } finally {
         setLoading(false);
       }
@@ -101,10 +116,10 @@ export default function WallcoveringCollectionPage() {
     fetchCategories();
   }, []);
 
-  // ✅ Helper to get product count per category
+  // Helper to get product count per category
   const getProductCount = (categorySlug: string) => {
     return products.filter(p => 
-      p.category === categorySlug || p.category_slug === categorySlug
+      p.category_slug === categorySlug
     ).length;
   };
 
@@ -112,24 +127,20 @@ export default function WallcoveringCollectionPage() {
     if (filter === "all") return true;
     if (filter === "video") return product.images?.some(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
     if (filter === "image") return !product.images?.some(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
-    return product.category === filter || product.category_slug === filter;
+    // ✅ Filter by category_slug (bukan category)
+    return product.category_slug === filter;
   });
 
-  // ✅ ROBUST getPrimaryMedia function dengan debugging
+  // ✅ ROBUST getPrimaryMedia function
   const getPrimaryMedia = (images: any) => {
-    // Handle null/undefined
-    if (!images) {
-      return null;
-    }
+    if (!images) return null;
 
-    // Handle jika images adalah string JSON
     let imgArray: string[] = [];
     
     if (typeof images === 'string') {
       try {
         imgArray = JSON.parse(images);
       } catch {
-        // Jika gagal parse, coba anggap sebagai single URL
         imgArray = [images];
       }
     } else if (Array.isArray(images)) {
@@ -138,18 +149,11 @@ export default function WallcoveringCollectionPage() {
       return null;
     }
 
-    if (!imgArray || imgArray.length === 0) {
-      return null;
-    }
+    if (!imgArray || imgArray.length === 0) return null;
 
-    // Filter hanya string yang valid
     const validImages = imgArray.filter(img => typeof img === 'string' && img.trim() !== '');
-    
-    if (validImages.length === 0) {
-      return null;
-    }
+    if (validImages.length === 0) return null;
 
-    // Cari video dan gambar
     const firstVideo = validImages.find(img => 
       img.endsWith('.mp4') || img.endsWith('.webm') || img.endsWith('.ogg')
     );
@@ -162,6 +166,30 @@ export default function WallcoveringCollectionPage() {
       type: firstVideo ? 'video' : 'image',
       src: firstVideo || firstImage || null
     };
+  };
+
+  // ✅ HELPER: Format price dengan priority: priceRange > minPrice > base price
+  const formatProductPrice = (product: Product) => {
+    // ✅ Priority 1: priceRange dari API admin
+    if (product.priceRange && product.priceRange.min > 0) {
+      const min = formatCurrency(product.priceRange.min);
+      const max = product.priceRange.max !== product.priceRange.min 
+        ? ` - ${formatCurrency(product.priceRange.max)}` 
+        : '';
+      return `${min}${max} <span class="text-sm text-krearte-gray-500 font-light">/m²</span>`;
+    }
+    
+    // Priority 2: legacy minPrice/maxPrice
+    if (product.hasMaterialPrices && product.minPrice !== undefined) {
+      const min = formatCurrency(product.minPrice);
+      const max = product.maxPrice !== undefined && product.maxPrice !== product.minPrice
+        ? ` - ${formatCurrency(product.maxPrice)}`
+        : '';
+      return `${min}${max} <span class="text-sm text-krearte-gray-500 font-light">/m²</span>`;
+    }
+    
+    // Fallback: base price
+    return `${formatCurrency(product.price)} <span class="text-sm text-krearte-gray-500 font-light">/m²</span>`;
   };
 
   const handleFilterChange = (value: string) => {
@@ -250,13 +278,7 @@ export default function WallcoveringCollectionPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredProducts.map((product) => {
-              // ✅ DEBUG LOG - HAPUS SETELAH GAMBAR MUNCUL
-              console.log('🔍 Product:', product.name);
-              console.log('🖼️ Images array:', product.images);
-              
               const media = getPrimaryMedia(product.images);
-              console.log('🎬 Media result:', media);
-              console.log('---');
               
               return (
                 <div
@@ -273,9 +295,6 @@ export default function WallcoveringCollectionPage() {
                           muted
                           loop
                           playsInline
-                          onError={(e) => {
-                            console.error('❌ Video failed to load:', media.src);
-                          }}
                         />
                       ) : media?.src ? (
                         <img
@@ -283,14 +302,10 @@ export default function WallcoveringCollectionPage() {
                           alt={product.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           loading="lazy"
-                          onError={(e) => {
-                            console.error('❌ Image failed to load:', media.src);
-                            e.currentTarget.src = '/images/placeholder.jpg';
-                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
-                          <span className="text-6xl font-light">{product.name.charAt(0)}</span>
+                          <span className="text-6xl font-light">{product.name?.charAt(0) || 'P'}</span>
                         </div>
                       )}
                     </div>
@@ -310,24 +325,11 @@ export default function WallcoveringCollectionPage() {
                     )}
                     
                     <div className="flex items-center justify-between">
-                      <p className="text-krearte-black font-normal">
-                        {product.hasMaterialPrices && product.minPrice !== undefined ? (
-                          <>
-                            {formatCurrency(product.minPrice)}
-                            {product.maxPrice !== undefined && product.maxPrice !== product.minPrice && (
-                              <span className="text-krearte-gray-500 font-light">
-                                {' '}- {formatCurrency(product.maxPrice)}
-                              </span>
-                            )}
-                            <span className="text-sm text-krearte-gray-500 font-light">/m²</span>
-                          </>
-                        ) : (
-                          <>
-                            {formatCurrency(product.price)}
-                            <span className="text-sm text-krearte-gray-500 font-light">/m²</span>
-                          </>
-                        )}
-                      </p>
+                      {/* ✅ PRICE DISPLAY - Pakai helper function */}
+                      <p 
+                        className="text-krearte-black font-normal"
+                        dangerouslySetInnerHTML={{ __html: formatProductPrice(product) }}
+                      />
                       
                       <Link
                         href={`/product/${product.slug}`}
