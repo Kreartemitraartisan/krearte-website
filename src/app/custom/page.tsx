@@ -1,3 +1,4 @@
+// app/custom-with-us/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -18,13 +19,15 @@ interface Product {
   id: string;
   name: string;
   slug: string;
-  description: string;
+  description: string | null;
   category: string;
   price: number;
-  images: string[];
+  images: string[] | null;
   sizes: ProductSize[];
   collectionType: string;
-  recommendedMaterials: string[];
+  recommendedMaterials?: string[];
+  // ✅ TAMBAHKAN: priceRange dari API admin
+  priceRange?: { min: number; max: number } | null;
 }
 
 export default function CustomWithUsPage() {
@@ -88,18 +91,46 @@ export default function CustomWithUsPage() {
     { id: "25d-print", name: "2.5D Print Effect", price: 500000, description: "Raised print texture you can feel" },
   ];
 
+  // ✅ HELPER: Format price dengan priority priceRange > base price
+  const formatDesignPrice = (product: Product) => {
+    // ✅ Priority 1: priceRange dari API admin
+    if (product.priceRange && product.priceRange.min > 0) {
+      const min = formatCurrency(product.priceRange.min);
+      const max = product.priceRange.max !== product.priceRange.min 
+        ? ` - ${formatCurrency(product.priceRange.max)}` 
+        : '';
+      return `${min}${max}/m²`;
+    }
+    // Fallback: base price
+    return `${formatCurrency(product.price)}/m²`;
+  };
+
   // Fetch designs from API
   useEffect(() => {
     async function fetchDesigns() {
       try {
-        // ✅ Fetch 100 untuk rekomendasi material, tapi tampilkan cuma 6 di UI
-        const response = await fetch("/api/products?limit=100");
+        console.log('🔍 Fetching designs for custom page...');
+        
+        // ✅ Gunakan API admin yang sudah return priceRange
+        const response = await fetch("/api/admin/products");
         const result = await response.json();
+        
+        console.log('📦 Designs API response:', result);
+        
         if (result.success) {
-          setDesigns(result.products || []);
+          // ✅ Filter: hanya wallcovering products yang punya images
+          const wallcoveringDesigns = (result.products || [])
+            .filter((p: Product) => 
+              p.collectionType?.toLowerCase() === 'wallcovering' &&
+              p.images && p.images.length > 0
+            )
+            .slice(0, 100); // Limit 100 untuk performance
+          
+          console.log(`✅ Loaded ${wallcoveringDesigns.length} wallcovering designs`);
+          setDesigns(wallcoveringDesigns);
         }
       } catch (error) {
-        console.error("Error fetching designs:", error);
+        console.error("❌ Error fetching designs:", error);
       } finally {
         setLoadingDesigns(false);
       }
@@ -239,7 +270,7 @@ export default function CustomWithUsPage() {
 • Phone: ${formData.phone}
 
 *🖼️ Design:*
-${selectedDesign ? `• Design: ${selectedDesign.name} (${selectedDesign.slug})` : "• Design: Custom / No specific design selected"}
+${selectedDesign ? `• Design: ${selectedDesign.name} (${selectedDesign.slug})\n• Price: ${formatDesignPrice(selectedDesign)}` : "• Design: Custom / No specific design selected"}
 
 *📦 Material:*
 • Type: ${selectedMaterial.name}
@@ -386,44 +417,45 @@ _Mohon konfirmasi ketersediaan dan harga final. Terima kasih!_
                       ) : previewDesigns.length > 0 ? (
                         <>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                            {previewDesigns.map((design) => (
-                              <button
-                                key={design.id}
-                                type="button"
-                                onClick={() => setSelectedDesign(design)}
-                                className={`p-4 border rounded-lg text-left transition-all ${
-                                  selectedDesign?.id === design.id
-                                    ? "border-krearte-black bg-krearte-black text-krearte-white"
-                                    : "border-krearte-gray-200 hover:border-krearte-black"
-                                }`}
-                              >
-                                <div className="aspect-video bg-krearte-gray-100 mb-3 rounded overflow-hidden">
-                                  {design.images && design.images.length > 0 ? (
-                                    (() => {
-                                      const thumbnailImage = design.images.find(img =>
-                                        !img.endsWith('.mp4') && !img.endsWith('.webm')
-                                      ) || design.images[0];
-                                      const isVideo = thumbnailImage.endsWith('.mp4') || thumbnailImage.endsWith('.webm');
-                                      return isVideo ? (
+                            {previewDesigns.map((design) => {
+                              const thumbnailImage = design.images?.find(img =>
+                                !img.endsWith('.mp4') && !img.endsWith('.webm')
+                              ) || design.images?.[0];
+                              const isVideo = thumbnailImage?.endsWith('.mp4') || thumbnailImage?.endsWith('.webm');
+                              
+                              return (
+                                <button
+                                  key={design.id}
+                                  type="button"
+                                  onClick={() => setSelectedDesign(design)}
+                                  className={`p-4 border rounded-lg text-left transition-all ${
+                                    selectedDesign?.id === design.id
+                                      ? "border-krearte-black bg-krearte-black text-krearte-white"
+                                      : "border-krearte-gray-200 hover:border-krearte-black"
+                                  }`}
+                                >
+                                  <div className="aspect-video bg-krearte-gray-100 mb-3 rounded overflow-hidden">
+                                    {thumbnailImage ? (
+                                      isVideo ? (
                                         <video autoPlay loop muted playsInline className="w-full h-full object-cover">
                                           <source src={thumbnailImage} type="video/mp4" />
                                         </video>
                                       ) : (
                                         <img src={thumbnailImage} alt={design.name} className="w-full h-full object-cover" />
-                                      );
-                                    })()
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
-                                      <span className="text-2xl font-light">{design.name.charAt(0)}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <p className="font-normal text-sm mb-1">{design.name}</p>
-                                <p className={`text-xs ${selectedDesign?.id === design.id ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
-                                  {formatCurrency(design.price)}/m²
-                                </p>
-                              </button>
-                            ))}
+                                      )
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
+                                        <span className="text-2xl font-light">{design.name?.charAt(0) || 'P'}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="font-normal text-sm mb-1">{design.name}</p>
+                                  <p className={`text-xs ${selectedDesign?.id === design.id ? "text-krearte-gray-300" : "text-krearte-gray-500"}`}>
+                                    {formatDesignPrice(design)}
+                                  </p>
+                                </button>
+                              );
+                            })}
                           </div>
 
                           {/* ✅ See More Designs Button */}
