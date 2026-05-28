@@ -1,3 +1,4 @@
+// src/app/collections/designers/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,18 +17,14 @@ interface Product {
   id: string;
   name: string;
   slug: string;
-  description: string;
+  description: string | null;
   category: string;
   price: number;
-  images: string[];
+  images: string[] | null;
   sizes: ProductSize[];
   collectionType?: string;
   availableMaterialIds?: string[];
-  priceRange?: {
-    min: number;
-    max: number;
-  };
-  // ✅ TAMBAHKAN INI untuk badge 2.5D
+  priceRange?: { min: number; max: number };
   is25DEligible?: boolean;
 }
 
@@ -39,27 +36,21 @@ export default function DesignerCollectionsPage() {
   useEffect(() => {
     async function fetchProducts() {
       try {
-        // ✅ Fetch dengan collectionType DAN category untuk fallback
-        const response = await fetch("/api/products?collectionType=designer&category=designer");
+        // ✅ Gunakan API admin products
+        const response = await fetch("/api/admin/products");
         const result = await response.json();
         
         if (result.success) {
-          // ✅ Filter yang lebih flexible - support multiple category naming
+          // ✅ Filter: collectionType === 'designer'
           const designerProducts = (result.products || []).filter((p: Product) => {
-            const category = p.category?.toLowerCase() || '';
-            const collectionType = p.collectionType?.toLowerCase() || '';
-            
-            // Match: collectionType = 'designer' OR category contains 'designer'
-            return collectionType === 'designer' || 
-                   category === 'designer' || 
-                   category === 'designer collection' ||
-                   category.includes('designer');
+            return p.collectionType?.toLowerCase() === 'designer';
           });
           
           setProducts(designerProducts);
+          console.log(`✅ Loaded ${designerProducts.length} designer products`);
         }
       } catch (error) {
-        console.error("Error fetching products:", error);
+        console.error("❌ Error fetching designer products:", error);
       } finally {
         setLoading(false);
       }
@@ -71,16 +62,14 @@ export default function DesignerCollectionsPage() {
   const filteredProducts = products.filter(product => {
     if (filter === "all") return true;
     if (filter === "metallic") return product.name.toLowerCase().includes('metallic');
-    if (filter === "premium") return product.price >= 500000;
+    if (filter === "premium") return product.price >= 500000 || (product.priceRange?.max || 0) >= 500000;
     if (filter === "video") return product.images?.some(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
     return true;
   });
 
-  // ✅ Helper function to get primary media (video priority)
-  const getPrimaryMedia = (images: string[] | undefined) => {
+  const getPrimaryMedia = (images: string[] | null | undefined) => {
     if (!images || images.length === 0) return { type: null, src: null };
     
-    // ✅ Prioritize video over images
     const firstVideo = images.find(img => img?.endsWith('.mp4') || img?.endsWith('.webm'));
     const firstImage = images.find(img => img && !img.endsWith('.mp4') && !img.endsWith('.webm'));
     
@@ -90,10 +79,12 @@ export default function DesignerCollectionsPage() {
     };
   };
 
-  // ✅ Format price display with priceRange support
   const formatPriceDisplay = (product: Product) => {
-    if (product.priceRange && product.priceRange.min !== product.priceRange.max) {
+    if (product.priceRange && product.priceRange.min > 0 && product.priceRange.min !== product.priceRange.max) {
       return `${formatCurrency(product.priceRange.min)} - ${formatCurrency(product.priceRange.max)}`;
+    }
+    if (product.priceRange && product.priceRange.min > 0) {
+      return formatCurrency(product.priceRange.min);
     }
     return formatCurrency(product.price);
   };
@@ -152,12 +143,12 @@ export default function DesignerCollectionsPage() {
         {/* Products Grid */}
         {filteredProducts.length === 0 ? (
           <div className="text-center py-24">
-            <p className="text-krearte-gray-500 font-light">No collections found</p>
+            <p className="text-krearte-gray-500 font-light">No designer collections found</p>
             <Link
               href="/collection/wallcovering"
               className="inline-block mt-4 text-krearte-black font-medium border-b border-krearte-black pb-0.5"
             >
-              Browse All Products
+              Browse Wallcovering Products
             </Link>
           </div>
         ) : (
@@ -171,7 +162,7 @@ export default function DesignerCollectionsPage() {
                   key={product.id}
                   className="group bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  {/* Product Media - Video/Image */}
+                  {/* Product Media */}
                   <Link href={`/product/${product.slug}`} className="block">
                     <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
                       {media?.type === 'video' && media.src ? (
@@ -198,14 +189,13 @@ export default function DesignerCollectionsPage() {
                         </div>
                       )}
                       
-                      {/* ✅ Badges - 2.5D Available instead of Video */}
+                      {/* Badges */}
                       <div className="absolute top-3 left-3 flex gap-2">
                         {isPremium && (
                           <span className="px-2 py-1 bg-krearte-black text-krearte-white text-xs rounded">
                             Premium
                           </span>
                         )}
-                        {/* ✅ Badge 2.5D Available (berdasarkan is25DEligible) */}
                         {product.is25DEligible && (
                           <span className="px-2 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-krearte-white text-xs rounded flex items-center gap-1 shadow-sm">
                             <Sparkles className="w-3 h-3" />
