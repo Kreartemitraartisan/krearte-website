@@ -11,6 +11,7 @@ interface Product {
   name: string;
   slug: string;
   category: string;
+  category_slug?: string | null; // ✅ TAMBAHKAN: category_slug (optional)
   price: number;
   images: string[];
   availableMaterialIds: string[];
@@ -113,6 +114,14 @@ export default function AdminProductsPage() {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // ✅ Helper: Format category slug untuk display (e.g., "flower-leaves" → "Flower Leaves")
+  const formatCategoryDisplay = (category: string, categorySlug?: string | null) => {
+    if (categorySlug && categorySlug.trim() !== '') {
+      return categorySlug.replace(/-/g, ' ');
+    }
+    return category;
   };
 
   const filteredProducts = products.filter(product =>
@@ -218,8 +227,12 @@ export default function AdminProductsPage() {
                       </div>
                     </div>
                   </td>
+                  
+                  {/* ✅ CATEGORY Column - Tampilkan category_slug dengan format */}
                   <td className="px-6 py-4">
-                    <span className="text-sm text-krearte-gray-600 capitalize">{product.category}</span>
+                    <span className="text-sm text-krearte-gray-600 capitalize">
+                      {formatCategoryDisplay(product.category, product.category_slug)}
+                    </span>
                   </td>
                   
                   {/* ✅ PRICE RANGE - Gunakan dari API */}
