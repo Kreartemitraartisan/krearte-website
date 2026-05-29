@@ -1,3 +1,4 @@
+// app/product/[slug]/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -115,7 +116,7 @@ export default function ProductDetail() {
     }
   }, [params.slug]);
 
-  // ✅ FIX: Fetch materials dan pisahkan menjadi Materials & Add-Ons dengan filter yang konsisten
+  // ✅ FIX: Fetch materials dan pisahkan menjadi Materials & Add-Ons
   useEffect(() => {
     async function fetchMaterials() {
       if (!params.slug || !product) return;
@@ -127,7 +128,7 @@ export default function ProductDetail() {
         if (result.success) {
           const allItems = result.materials || [];
           
-          // ✅ FIX: Filter Materials - Exclude SEMUA jasa/add-on/print/design/2.5d/sample
+          // ✅ FIX: Filter Materials
           const materialsOnly = allItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
@@ -142,7 +143,7 @@ export default function ProductDetail() {
                    m.pricePerM2 > 0;
           });
 
-          // ✅ FIX: Filter Services/Add-Ons - Include jasa/add-on/print/design, exclude sample
+          // ✅ FIX: Filter Services/Add-Ons
           const servicesOnly = allItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
@@ -164,13 +165,12 @@ export default function ProductDetail() {
             type: 'service' as const
           }));
           
-          // 2.5D Print Effect (hanya untuk Designer Collection)
+          // 2.5D Print Effect
           const isDesignerCollection = product.collectionType === 'designer' || product.is25DEligible;
           
           let allAddOns = [...servicesOnly];
           
           if (isDesignerCollection && product.is25DEligible) {
-            // Cari 2.5D dari database dulu
             const existing25D = allItems.find((m: Material) => 
               m.name.toLowerCase().includes('2.5d') || 
               m.name.toLowerCase().includes('25d')
@@ -185,12 +185,11 @@ export default function ProductDetail() {
                 type: 'effect' as const
               });
             } else {
-              // Fallback jika tidak ada di database
               allAddOns.push({
                 id: '25d-effect',
                 name: '2.5D Print Effect',
                 description: 'Raised texture that you can feel - adds depth and luxury',
-                price: 80000, // Rp 80.000/m² sesuai screenshot
+                price: 500000, // Rp 500.000/m²
                 type: 'effect' as const
               });
             }
@@ -200,7 +199,6 @@ export default function ProductDetail() {
           setAddOns(allAddOns);
           setPriceRange(result.priceRange || { min: 0, max: 0 });
           
-          // Set default material
           const recommended = materialsOnly?.find((m: Material) => m.isRecommended);
           if (recommended) {
             setSelectedMaterial(recommended);
@@ -223,7 +221,7 @@ export default function ProductDetail() {
     fetchMaterials();
   }, [params.slug, product]);
 
-  // Wheel handler untuk material scroll
+  // Wheel handler
   useEffect(() => {
     const container = materialContainerRef.current;
     if (!container) return;
@@ -244,7 +242,6 @@ export default function ProductDetail() {
     };
   }, [materials]);
 
-  // Helper function untuk get price berdasarkan role
   const getPriceByRole = (material: Material) => {
     const userRole = session?.user?.role as string || 'customer';
     
@@ -269,7 +266,6 @@ export default function ProductDetail() {
     };
   };
 
-  // Helper: Calculate panel & waste info
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
@@ -294,7 +290,7 @@ export default function ProductDetail() {
     };
   };
 
-  // Calculate total price
+  // ✅ Calculate total price dengan perhitungan 2.5D yang benar
   const calculateTotalPrice = () => {
     if (!selectedMaterial && product) {
       const areaM2 = (widthCm / 100) * (heightCm / 100);
@@ -302,12 +298,8 @@ export default function ProductDetail() {
     }
     if (!selectedMaterial) return 0;
     
-    const widthM = widthCm / 100;
-    const heightM = heightCm / 100;
-
     const widthWithOverlap = (widthCm + 6) / 100;
     const heightWithOverlap = (heightCm + 6) / 100;
-    
     const actualArea = widthWithOverlap * heightWithOverlap;
     
     const materialWidth = selectedMaterial.width 
@@ -315,9 +307,7 @@ export default function ProductDetail() {
       : 1.37;
     
     const panelsNeeded = Math.ceil(widthWithOverlap / materialWidth);
-    
     const totalPanelArea = panelsNeeded * (materialWidth * heightWithOverlap);
-    
     const wasteArea = totalPanelArea - actualArea;
     
     const { price: materialPrice } = getPriceByRole(selectedMaterial);
@@ -328,12 +318,15 @@ export default function ProductDetail() {
     
     let totalPrice = materialCost + wasteCost;
     
+    // ✅ Perhitungan Add-Ons yang benar
     selectedAddOns.forEach(addOnId => {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
+          // ✅ 2.5D Effect: harga per m² × actual area (print area)
           totalPrice += addOn.price * actualArea;
         } else {
+          // Service: harga fixed
           totalPrice += addOn.price;
         }
       }
@@ -344,8 +337,8 @@ export default function ProductDetail() {
 
   const calculatedPrice = calculateTotalPrice();
   const areaM2 = (widthCm / 100) * (heightCm / 100);
+  const panelInfo = getPanelInfo();
 
-  // Toggle Add-On
   const toggleAddOn = (addOnId: string) => {
     setSelectedAddOns(prev => 
       prev.includes(addOnId)
@@ -354,9 +347,6 @@ export default function ProductDetail() {
     );
   };
 
-  const panelInfo = getPanelInfo();
-
-  // Add to cart handler
   const handleAddToCart = () => {
     if (!product) return;
     
@@ -403,7 +393,6 @@ export default function ProductDetail() {
     addToCart(cartItem);
   };
 
-  // Share handler
   const handleShare = async () => {
     if (!product) return;
     
@@ -433,9 +422,8 @@ export default function ProductDetail() {
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
-        alert('✅ Link copied to clipboard!\n\nYou can now paste it anywhere to share.');
-      }).catch(err => {
-        console.error('Failed to copy:', err);
+        alert('✅ Link copied to clipboard!');
+      }).catch(() => {
         fallbackCopy(text);
       });
     } else {
@@ -449,22 +437,17 @@ export default function ProductDetail() {
     textArea.style.position = 'fixed';
     textArea.style.left = '-999999px';
     document.body.appendChild(textArea);
-    textArea.focus();
     textArea.select();
 
     try {
       document.execCommand('copy');
-      alert('✅ Link copied to clipboard!\n\nYou can now paste it anywhere to share.');
+      alert('✅ Link copied to clipboard!');
     } catch (err) {
-      console.error('Fallback copy failed:', err);
-      const userConfirmed = window.confirm(
-        'Unable to copy automatically.\n\nPlease copy this link manually:\n\n' + text
-      );
+      window.confirm('Unable to copy. Please copy manually:\n\n' + text);
     }
     document.body.removeChild(textArea);
   };
 
-  // Wishlist handler
   const handleWishlist = async () => {
     if (!product) return;
     const firstImage = product.images?.find(
@@ -483,7 +466,6 @@ export default function ProductDetail() {
     await toggleWishlist(wishlistItem);
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
@@ -492,16 +474,12 @@ export default function ProductDetail() {
     );
   }
 
-  // Product not found
   if (!product) {
     return (
       <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
         <div className="text-center">
           <h1 className="font-sans text-3xl font-light mb-4">Product Not Found</h1>
-          <Link
-            href="/collection/wallcovering"
-            className="text-krearte-black font-medium border-b border-krearte-black pb-0.5"
-          >
+          <Link href="/collection/wallcovering" className="text-krearte-black font-medium border-b border-krearte-black pb-0.5">
             Back to Collection
           </Link>
         </div>
@@ -511,13 +489,8 @@ export default function ProductDetail() {
 
   return (
     <div className="min-h-screen bg-krearte-cream">
-      
-      {/* Back Navigation */}
       <div className="container mx-auto px-6 md:px-12 py-6">
-        <Link
-          href="/collection/wallcovering"
-          className="inline-flex items-center text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors"
-        >
+        <Link href="/collection/wallcovering" className="inline-flex items-center text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors">
           <ChevronLeft className="w-4 h-4 mr-1" />
           Back to Collection
         </Link>
@@ -529,32 +502,16 @@ export default function ProductDetail() {
             
             {/* LEFT: Product Images */}
             <div className="space-y-6">
-              {/* Main Image */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="aspect-[16/9] bg-krearte-gray-100 overflow-hidden rounded-lg"
-              >
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="aspect-[16/9] bg-krearte-gray-100 overflow-hidden rounded-lg">
                 {product.images && product.images.length > 0 ? (
                   (() => {
                     const currentMedia = product.images[selectedImage];
                     const isVideo = currentMedia?.endsWith('.mp4') || currentMedia?.endsWith('.webm');
                     
                     return isVideo ? (
-                      <video
-                        src={currentMedia}
-                        className="w-full h-full object-cover"
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                      />
+                      <video src={currentMedia} className="w-full h-full object-cover" autoPlay muted loop playsInline />
                     ) : (
-                      <img
-                        src={currentMedia}
-                        alt={`${product.name} ${selectedImage + 1}`}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={currentMedia} alt={`${product.name} ${selectedImage + 1}`} className="w-full h-full object-cover" />
                     );
                   })()
                 ) : (
@@ -564,7 +521,6 @@ export default function ProductDetail() {
                 )}
               </motion.div>
 
-              {/* Thumbnail Images */}
               {product.images && product.images.length > 1 && (
                 <div className="flex gap-3 overflow-x-auto">
                   {product.images.map((img, index) => (
@@ -572,18 +528,12 @@ export default function ProductDetail() {
                       key={index}
                       onClick={() => setSelectedImage(index)}
                       className={`relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden transition-all ${
-                        selectedImage === index
-                          ? "border-2 border-krearte-black shadow-md"
-                          : "border-2 border-transparent hover:border-krearte-gray-300"
+                        selectedImage === index ? "border-2 border-krearte-black shadow-md" : "border-2 border-transparent hover:border-krearte-gray-300"
                       }`}
                     >
                       {img.endsWith('.mp4') || img.endsWith('.webm') ? (
                         <>
-                          <video
-                            src={img}
-                            className="w-full h-full object-cover"
-                            muted
-                          />
+                          <video src={img} className="w-full h-full object-cover" muted />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
                             <svg className="w-6 h-6 text-krearte-white drop-shadow-lg" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
@@ -591,11 +541,7 @@ export default function ProductDetail() {
                           </div>
                         </>
                       ) : (
-                        <img
-                          src={img}
-                          alt={`${product.name} ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={img} alt={`${product.name} ${index + 1}`} className="w-full h-full object-cover" />
                       )}
                     </button>
                   ))}
@@ -605,22 +551,10 @@ export default function ProductDetail() {
 
             {/* RIGHT: Product Info */}
             <div className="lg:py-12">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                {/* Category */}
-                <p className="text-sm font-light text-krearte-gray-600 mb-4 capitalize">
-                  {product.category}
-                </p>
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <p className="text-sm font-light text-krearte-gray-600 mb-4 capitalize">{product.category}</p>
+                <h1 className="font-sans text-4xl md:text-5xl font-light mb-6 text-krearte-black">{product.name}</h1>
 
-                {/* Title */}
-                <h1 className="font-sans text-4xl md:text-5xl font-light mb-6 text-krearte-black">
-                  {product.name}
-                </h1>
-
-                {/* Price Display */}
                 <div className="mb-8">
                   {loadingMaterials ? (
                     <div className="h-8 w-64 bg-krearte-gray-200 animate-pulse rounded" />
@@ -630,72 +564,46 @@ export default function ProductDetail() {
                         <p className="text-2xl font-normal text-krearte-black">
                           {formatCurrency(getPriceByRole(selectedMaterial).price)}
                         </p>
-                        <span className="text-sm font-light text-krearte-gray-500">
-                          /m² (belum termasuk waste)
-                        </span>
+                        <span className="text-sm font-light text-krearte-gray-500">/m² (belum termasuk waste)</span>
                         {session?.user?.role && session.user.role !== 'customer' && (
                           <span className={`text-xs px-2 py-1 rounded font-medium ${
-                            session.user.role === 'designer' 
-                              ? 'bg-purple-100 text-purple-700' 
-                              : 'bg-blue-100 text-blue-700'
+                            session.user.role === 'designer' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                           }`}>
                             {getPriceByRole(selectedMaterial).label}
                           </span>
                         )}
                       </div>
-                      
                       {getPriceByRole(selectedMaterial).discount > 0 && (
-                        <p className="text-sm text-green-600 font-light">
-                          You save: {formatCurrency(getPriceByRole(selectedMaterial).discount)}/m²
-                        </p>
-                      )}
-                      
-                      {session?.user?.role && session.user.role !== 'customer' && (
-                        <p className="text-xs font-light text-krearte-gray-400">
-                          Retail: {formatCurrency(selectedMaterial.pricePerM2)}/m²
-                        </p>
+                        <p className="text-sm text-green-600 font-light">You save: {formatCurrency(getPriceByRole(selectedMaterial).discount)}/m²</p>
                       )}
                     </div>
                   ) : materials.length > 0 ? (
                     <p className="text-2xl font-normal text-krearte-black">
                       Start from {formatCurrency(priceRange.min)}
                       {priceRange.max !== priceRange.min && (
-                        <span className="text-lg font-light text-krearte-gray-500 ml-2">
-                          - {formatCurrency(priceRange.max)}
-                        </span>
+                        <span className="text-lg font-light text-krearte-gray-500 ml-2">- {formatCurrency(priceRange.max)}</span>
                       )}
-                      <span className="text-sm font-light text-krearte-gray-500 ml-2">
-                        /m² (belum termasuk waste)
-                      </span>
+                      <span className="text-sm font-light text-krearte-gray-500 ml-2">/m²</span>
                     </p>
                   ) : (
                     <p className="text-2xl font-normal text-krearte-black">
                       {formatCurrency(product.price)}
-                      <span className="text-sm font-light text-krearte-gray-500 ml-2">
-                        /m² (standard material)
-                      </span>
+                      <span className="text-sm font-light text-krearte-gray-500 ml-2">/m²</span>
                     </p>
                   )}
                 </div>
 
-                {/* Description */}
-                <p className="font-light text-krearte-gray-700 leading-relaxed mb-8">
-                  {product.description}
-                </p>
+                <p className="font-light text-krearte-gray-700 leading-relaxed mb-8">{product.description}</p>
 
                 {/* Material Selector */}
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Package className="w-5 h-5 text-krearte-black" />
-                      <label className="text-sm font-normal text-krearte-black">
-                        Select Material
-                      </label>
+                      <label className="text-sm font-normal text-krearte-black">Select Material</label>
                     </div>
                     {selectedMaterial?.width && (
-                      <span className="text-sm font-light text-krearte-gray-600">
-                        Width: {selectedMaterial.width}
-                      </span>
+                      <span className="text-sm font-light text-krearte-gray-600">Width: {selectedMaterial.width}</span>
                     )}
                   </div>
 
@@ -707,60 +615,28 @@ export default function ProductDetail() {
                     </div>
                   ) : materials.length === 0 ? (
                     <div className="p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
-                      <p className="text-sm font-light text-krearte-gray-600">
-                        No materials available for this product.
-                      </p>
+                      <p className="text-sm font-light text-krearte-gray-600">No materials available.</p>
                     </div>
                   ) : (
-                    <div 
-                      ref={materialContainerRef}
-                      className="space-y-3 max-h-80 overflow-y-auto pr-2"
-                      style={{
-                        scrollbarWidth: 'thin',
-                        msOverflowStyle: 'auto',
-                        overscrollBehavior: 'contain',
-                      }}
-                      onMouseEnter={(e) => e.stopPropagation()}
-                      onMouseLeave={(e) => e.stopPropagation()}
-                    >
+                    <div ref={materialContainerRef} className="space-y-3 max-h-80 overflow-y-auto pr-2">
                       {materials.map((material) => (
                         <button
                           key={material.id}
                           onClick={() => setSelectedMaterial(material)}
                           className={`w-full p-4 border-2 text-left transition-all rounded-lg ${
-                            selectedMaterial?.id === material.id
-                              ? "border-krearte-black bg-krearte-gray-50"
-                              : "border-krearte-gray-200 hover:border-krearte-gray-300"
+                            selectedMaterial?.id === material.id ? "border-krearte-black bg-krearte-gray-50" : "border-krearte-gray-200 hover:border-krearte-gray-300"
                           }`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="font-normal text-krearte-black">
-                                  {material.name}
-                                </span>
-                                {material.isRecommended && (
-                                  <span className="text-yellow-500">⭐</span>
-                                )}
+                                <span className="font-normal text-krearte-black">{material.name}</span>
+                                {material.isRecommended && <span className="text-yellow-500">⭐</span>}
                               </div>
-                              {material.description && (
-                                <p className="text-xs font-light text-krearte-gray-500">
-                                  {material.description}
-                                </p>
-                              )}
                             </div>
                             <div className="text-right ml-4">
-                              <p className="font-normal text-krearte-black text-sm">
-                                {formatCurrency(getPriceByRole(material).price)}
-                              </p>
-                              <p className="text-xs font-light text-krearte-gray-500">
-                                + {formatCurrency(material.waste)} waste
-                              </p>
-                              {session?.user?.role && session.user.role !== 'customer' && (
-                                <p className="text-xs font-light text-krearte-gray-400">
-                                  Retail: {formatCurrency(material.pricePerM2)}
-                                </p>
-                              )}
+                              <p className="font-normal text-krearte-black text-sm">{formatCurrency(getPriceByRole(material).price)}</p>
+                              <p className="text-xs font-light text-krearte-gray-500">+ {formatCurrency(material.waste)} waste</p>
                             </div>
                           </div>
                         </button>
@@ -769,7 +645,7 @@ export default function ProductDetail() {
                   )}
                 </div>
 
-                {/* Add-Ons Section - Dropdown */}
+                {/* Add-Ons Section */}
                 <div className="mb-6">
                   <button
                     type="button"
@@ -778,14 +654,8 @@ export default function ProductDetail() {
                   >
                     <div className="flex items-center gap-2">
                       <Wrench className="w-5 h-5 text-krearte-black" />
-                      <span className="text-sm font-normal text-krearte-black">
-                        Add-On Services
-                      </span>
-                      {addOns.length > 0 && (
-                        <span className="text-xs text-krearte-gray-500">
-                          ({selectedAddOns.length} selected)
-                        </span>
-                      )}
+                      <span className="text-sm font-normal text-krearte-black">Add-On Services</span>
+                      {addOns.length > 0 && <span className="text-xs text-krearte-gray-500">({selectedAddOns.length} selected)</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       {selectedAddOns.length > 0 && (
@@ -793,133 +663,58 @@ export default function ProductDetail() {
                           {formatCurrency(
                             selectedAddOns.reduce((total, addOnId) => {
                               const addOn = addOns.find(a => a.id === addOnId);
-                              return total + (addOn?.price || 0);
+                              if (!addOn) return total;
+                              return total + (addOn.type === 'effect' && panelInfo ? addOn.price * panelInfo.actualArea : addOn.price);
                             }, 0)
                           )}
                         </span>
                       )}
-                      <svg
-                        className={`w-5 h-5 text-krearte-gray-600 transition-transform duration-200 ${
-                          isAddOnsOpen ? 'rotate-180' : ''
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                      <svg className={`w-5 h-5 text-krearte-gray-600 transition-transform duration-200 ${isAddOnsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </div>
                   </button>
 
-                  <motion.div
-                    initial={false}
-                    animate={{
-                      height: isAddOnsOpen ? 'auto' : 0,
-                      opacity: isAddOnsOpen ? 1 : 0,
-                    }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
+                  <motion.div initial={false} animate={{ height: isAddOnsOpen ? 'auto' : 0, opacity: isAddOnsOpen ? 1 : 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                     <div className="pt-4 space-y-3">
                       {addOns.map((addOn) => (
-                        <label
-                          key={addOn.id}
-                          className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
-                            selectedAddOns.includes(addOn.id)
-                              ? "border-krearte-black bg-krearte-gray-50"
-                              : "border-krearte-gray-200 hover:border-krearte-gray-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedAddOns.includes(addOn.id)}
-                            onChange={() => toggleAddOn(addOn.id)}
-                            className="w-4 h-4 mt-0.5 accent-krearte-black"
-                          />
+                        <label key={addOn.id} className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${selectedAddOns.includes(addOn.id) ? "border-krearte-black bg-krearte-gray-50" : "border-krearte-gray-200 hover:border-krearte-gray-300"}`}>
+                          <input type="checkbox" checked={selectedAddOns.includes(addOn.id)} onChange={() => toggleAddOn(addOn.id)} className="w-4 h-4 mt-0.5 accent-krearte-black" />
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
+                              <span className="font-normal text-krearte-black text-sm">{addOn.name}</span>
                               <span className="font-normal text-krearte-black text-sm">
-                                {addOn.name}
-                              </span>
-                              <span className="font-normal text-krearte-black text-sm">
-                                {formatCurrency(addOn.price)}
+                                {addOn.type === 'effect' && panelInfo 
+                                  ? `${formatCurrency(addOn.price)}/m²`
+                                  : formatCurrency(addOn.price)
+                                }
                               </span>
                             </div>
-                            <p className="text-xs font-light text-krearte-gray-500 mb-1">
-                              {addOn.description}
-                            </p>
-                            {addOn.type === 'effect' && (
+                            <p className="text-xs font-light text-krearte-gray-500 mb-1">{addOn.description}</p>
+                            {addOn.type === 'effect' && panelInfo && (
                               <p className="text-xs text-krearte-gray-400">
-                                = {formatCurrency(addOn.price * areaM2)} for {areaM2.toFixed(2)} m²
+                                = {formatCurrency(addOn.price * panelInfo.actualArea)} for {panelInfo.actualArea.toFixed(2)} m²
                               </p>
                             )}
                           </div>
                         </label>
                       ))}
-                      
-                      {addOns.length === 0 && (
-                        <p className="text-sm text-krearte-gray-500 text-center py-4">
-                          No add-ons available for this product
-                        </p>
-                      )}
                     </div>
                   </motion.div>
                 </div>
 
                 {/* Dimensions Calculator */}
                 <div className="mb-8">
-                  <label className="block text-sm font-normal text-krearte-black mb-4">
-                    Dimensions (centimeters)
-                  </label>
+                  <label className="block text-sm font-normal text-krearte-black mb-4">Dimensions (centimeters)</label>
                   
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
-                      <label className="block text-xs font-light text-krearte-gray-600 mb-2">
-                        Width (cm)
-                      </label>
-                      <input
-                        type="number"
-                        value={widthCm}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '') {
-                            setWidthCm(0);
-                            return;
-                          }
-                          setWidthCm(parseFloat(value) || 0);
-                        }}
-                        onBlur={(e) => {
-                          const value = parseFloat(e.target.value);
-                          setWidthCm(Math.max(10, isNaN(value) ? 100 : value));
-                        }}
-                        step="1"
-                        min="1"
-                        className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light"
-                      />
+                      <label className="block text-xs font-light text-krearte-gray-600 mb-2">Width (cm)</label>
+                      <input type="number" value={widthCm} onChange={(e) => setWidthCm(parseFloat(e.target.value) || 0)} onBlur={(e) => setWidthCm(Math.max(10, parseFloat(e.target.value) || 100))} step="1" min="1" className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light" />
                     </div>
                     <div>
-                      <label className="block text-xs font-light text-krearte-gray-600 mb-2">
-                        Height (cm)
-                      </label>
-                      <input
-                        type="number"
-                        value={heightCm}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '') {
-                            setHeightCm(0);
-                            return;
-                          }
-                          setHeightCm(parseFloat(value) || 0);
-                        }}
-                        onBlur={(e) => {
-                          const value = parseFloat(e.target.value);
-                          setHeightCm(Math.max(10, isNaN(value) ? 100 : value));
-                        }}
-                        step="1"
-                        min="1"
-                        className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light"
-                      />
+                      <label className="block text-xs font-light text-krearte-gray-600 mb-2">Height (cm)</label>
+                      <input type="number" value={heightCm} onChange={(e) => setHeightCm(parseFloat(e.target.value) || 0)} onBlur={(e) => setHeightCm(Math.max(10, parseFloat(e.target.value) || 100))} step="1" min="1" className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black font-light" />
                     </div>
                   </div>
 
@@ -928,85 +723,66 @@ export default function ProductDetail() {
                     <div className="p-4 bg-krearte-gray-50 rounded-lg space-y-2">
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">Dimensions:</span>
-                        <span className="font-normal text-krearte-black">
-                          {widthCm}cm × {heightCm}cm
-                        </span>
+                        <span className="font-normal text-krearte-black">{widthCm}cm × {heightCm}cm</span>
                       </div>
                       
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">With 3cm overlap:</span>
-                        <span className="font-normal text-krearte-black">
-                          {widthCm + 6}cm × {heightCm + 6}cm = {panelInfo.actualArea.toFixed(2)} m²
-                        </span>
+                        <span className="font-normal text-krearte-black">{widthCm + 6}cm × {heightCm + 6}cm = {panelInfo.actualArea.toFixed(2)} m²</span>
                       </div>
                       
                       {selectedMaterial && (
-                        <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
-                          <span className="font-light text-krearte-gray-600">Panels needed:</span>
-                          <span className="font-normal text-krearte-black">
-                            {panelInfo.panelsNeeded} panel(s) ({panelInfo.materialWidth.toFixed(2)}m width)
-                          </span>
-                        </div>
+                        <>
+                          <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
+                            <span className="font-light text-krearte-gray-600">Panels needed:</span>
+                            <span className="font-normal text-krearte-black">{panelInfo.panelsNeeded} panel(s)</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
+                            <span className="font-light text-krearte-gray-600">Print Area:</span>
+                            <span className="font-normal text-krearte-black">{panelInfo.actualArea.toFixed(2)} m²</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
+                            <span className="font-light text-krearte-gray-600">Waste:</span>
+                            <span className="font-normal text-orange-600">{panelInfo.wasteArea.toFixed(2)} m²</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm mt-2">
+                            <span className="font-light text-krearte-gray-600">Material ({getPriceByRole(selectedMaterial).label}):</span>
+                            <span className="font-light text-krearte-black">{formatCurrency(getPriceByRole(selectedMaterial).price)} × {panelInfo.actualArea.toFixed(2)} m²</span>
+                          </div>
+                          
+                          <div className="flex justify-between text-sm">
+                            <span className="font-light text-krearte-gray-600">Waste (cutting):</span>
+                            <span className="font-light text-krearte-black">{formatCurrency(selectedMaterial.waste || 60000)} × {panelInfo.wasteArea.toFixed(2)} m²</span>
+                          </div>
+                        </>
                       )}
                       
-                      {selectedMaterial && (
-                        <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
-                          <span className="font-light text-krearte-gray-600">Material Needed:</span>
-                          <span className="font-normal text-krearte-black">
-                            {panelInfo.totalPanelArea.toFixed(2)} m²
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
-                        <span className="font-light text-krearte-gray-600">Print Area:</span>
-                        <span className="font-normal text-krearte-black">
-                          {panelInfo.actualArea.toFixed(2)} m²
-                        </span>
-                      </div>
-                      
-                      {selectedMaterial && (
-                        <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
-                          <span className="font-light text-krearte-gray-600">Waste:</span>
-                          <span className="font-normal text-orange-600">
-                            {panelInfo.wasteArea.toFixed(2)} m²
-                          </span>
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between text-sm mt-2">
-                        <span className="font-light text-krearte-gray-600">
-                          Material ({selectedMaterial ? getPriceByRole(selectedMaterial).label : 'Standard'}):
-                        </span>
-                        <span className="font-light text-krearte-black">
-                          {formatCurrency(selectedMaterial ? getPriceByRole(selectedMaterial).price : product.price)} × {panelInfo.actualArea.toFixed(2)} m²
-                        </span>
-                      </div>
-                      
-                      {selectedMaterial && (
-                        <div className="flex justify-between text-sm">
-                          <span className="font-light text-krearte-gray-600">Waste (cutting):</span>
-                          <span className="font-light text-krearte-black">
-                            {formatCurrency(selectedMaterial.waste || 60000)} × {panelInfo.wasteArea.toFixed(2)} m²
-                          </span>
-                        </div>
-                      )}
-                      
+                      {/* ✅ Add-Ons Breakdown dengan perhitungan yang benar */}
                       {selectedAddOns.length > 0 && (
-                        <div className="border-t border-krearte-gray-200 pt-2 space-y-1">
+                        <div className="border-t border-krearte-gray-200 pt-2 mt-2 space-y-1">
                           <p className="text-xs font-medium text-krearte-gray-600 mb-2">Add-Ons:</p>
                           {selectedAddOns.map(addOnId => {
                             const addOn = addOns.find(a => a.id === addOnId);
                             if (!addOn) return null;
+                            
+                            const addOnTotal = addOn.type === 'effect' && panelInfo 
+                              ? addOn.price * panelInfo.actualArea 
+                              : addOn.price;
+                            
                             return (
                               <div key={addOnId} className="flex justify-between text-sm">
-                                <span className="font-light text-krearte-gray-600">{addOn.name}:</span>
-                                <span className="font-light text-krearte-black">
-                                  {addOn.type === 'effect'
-                                    ? `${formatCurrency(addOn.price)} × {panelInfo.actualArea.toFixed(2)} m²`
-                                    : formatCurrency(addOn.price)
-                                  }
+                                <span className="font-light text-krearte-gray-600">
+                                  {addOn.name}:
+                                  {addOn.type === 'effect' && panelInfo && (
+                                    <span className="text-xs text-krearte-gray-400 ml-1">
+                                      ({formatCurrency(addOn.price)}/m² × {panelInfo.actualArea.toFixed(2)} m²)
+                                    </span>
+                                  )}
                                 </span>
+                                <span className="font-light text-krearte-black">{formatCurrency(addOnTotal)}</span>
                               </div>
                             );
                           })}
@@ -1016,9 +792,7 @@ export default function ProductDetail() {
                       <div className="border-t border-krearte-gray-200 pt-2 mt-2">
                         <div className="flex justify-between">
                           <span className="font-normal text-krearte-black">Total:</span>
-                          <span className="text-lg font-normal text-krearte-black">
-                            {formatCurrency(calculateTotalPrice())}
-                          </span>
+                          <span className="text-lg font-normal text-krearte-black">{formatCurrency(calculateTotalPrice())}</span>
                         </div>
                       </div>
                     </div>
@@ -1032,31 +806,21 @@ export default function ProductDetail() {
                   onClick={handleAddToCart}
                   disabled={!selectedMaterial && materials.length > 0}
                   className={`w-full py-4 text-sm font-medium transition-all duration-300 mb-4 ${
-                    selectedMaterial || materials.length === 0
-                      ? "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal cursor-pointer"
-                      : "bg-krearte-gray-200 text-krearte-gray-400 cursor-not-allowed"
+                    selectedMaterial || materials.length === 0 ? "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal cursor-pointer" : "bg-krearte-gray-200 text-krearte-gray-400 cursor-not-allowed"
                   }`}
                 >
-                  {selectedMaterial || materials.length === 0
-                    ? `Add to Cart - ${formatCurrency(calculatedPrice)}`
-                    : "Select a Material"}
+                  {selectedMaterial || materials.length === 0 ? `Add to Cart - ${formatCurrency(calculatedPrice)}` : "Select a Material"}
                 </motion.button>
 
                 {/* Sample & Custom Print Buttons */}
                 <div className="grid grid-cols-2 gap-4">
-                  <Link
-                    href={`/product/${product.slug}/sample`}
-                    className="flex items-center justify-center gap-2 py-3 border border-krearte-black text-krearte-black rounded-full text-sm font-medium hover:bg-krearte-black hover:text-krearte-white transition-colors"
-                  >
+                  <Link href={`/product/${product.slug}/sample`} className="flex items-center justify-center gap-2 py-3 border border-krearte-black text-krearte-black rounded-full text-sm font-medium hover:bg-krearte-black hover:text-krearte-white transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Order Sample
                   </Link>
-                  <Link
-                    href="/custom"
-                    className="flex items-center justify-center gap-2 py-3 border border-krearte-black text-krearte-black rounded-full text-sm font-medium hover:bg-krearte-black hover:text-krearte-white transition-colors"
-                  >
+                  <Link href="/custom" className="flex items-center justify-center gap-2 py-3 border border-krearte-black text-krearte-black rounded-full text-sm font-medium hover:bg-krearte-black hover:text-krearte-white transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
                     </svg>
@@ -1066,31 +830,12 @@ export default function ProductDetail() {
 
                 {/* Share & Wishlist */}
                 <div className="mt-8 flex items-center gap-4">
-                  <button
-                    onClick={handleWishlist}
-                    disabled={wishlistLoading}
-                    className={`flex items-center gap-2 text-sm font-light transition-colors ${
-                      isInWishlist(product?.id || "")
-                        ? "text-red-500"
-                        : "text-krearte-gray-600 hover:text-krearte-black"
-                    } ${wishlistLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <Heart 
-                      className={`w-5 h-5 ${isInWishlist(product?.id || "") ? "fill-current" : ""}`} 
-                    />
-                    {wishlistLoading 
-                      ? "..." 
-                      : isInWishlist(product?.id || "") 
-                        ? "Wishlisted" 
-                        : "Add to Wishlist"
-                    }
+                  <button onClick={handleWishlist} disabled={wishlistLoading} className={`flex items-center gap-2 text-sm font-light transition-colors ${isInWishlist(product?.id || "") ? "text-red-500" : "text-krearte-gray-600 hover:text-krearte-black"} ${wishlistLoading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                    <Heart className={`w-5 h-5 ${isInWishlist(product?.id || "") ? "fill-current" : ""}`} />
+                    {wishlistLoading ? "..." : isInWishlist(product?.id || "") ? "Wishlisted" : "Add to Wishlist"}
                   </button>
                   
-                  <button
-                    type="button"
-                    onClick={handleShare}
-                    className="flex items-center gap-2 text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors cursor-pointer"
-                  >
+                  <button type="button" onClick={handleShare} className="flex items-center gap-2 text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors cursor-pointer">
                     <Share2 className="w-5 h-5" />
                     Share
                   </button>
