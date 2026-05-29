@@ -62,7 +62,7 @@ interface CartItem {
   // ✅ Tambahan untuk Sample Order Flow
   isSample?: boolean;
   product?: { name: string; slug: string; image: string }; // Info produk untuk sample
-  materialInfo?: { name: string; category: string }; // Info material untuk sample (pake nama 'materialInfo' biar gak bentrok)
+  materialInfo?: { name: string; category: string }; // Info material untuk sample
   customerInfo?: {
     firstName: string;
     lastName: string;
@@ -180,35 +180,38 @@ export default function CheckoutClient() {
 
     try {
       // ✅ Prepare order data (handle both sample & regular)
-      // Explicitly cast item to CartItem
       const itemsForOrder = displayItems?.map((item: CartItem) => {
         if (item.isSample) {
+          // ✅ FIX: Pisahkan materialName dan material untuk sample
           return {
-            productId: item.product?.slug || "",
-            name: `Sample - ${item.product?.name}`,
-            size: item.size,
-            price: item.price,
-            quantity: item.quantity,
-            // Use materialInfo for sample
-            material: `${item.materialInfo?.name} (${item.materialInfo?.category})`,
+            productId: null, // Sample tidak perlu productId valid
+            name: `Sample - ${item.product?.name || 'Unknown'}`,
+            size: item.size || 'A3 Sample',
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            // ✅ FIX: Material fields terpisah, bukan digabung string
+            materialName: item.materialInfo?.name || null,
+            material: item.materialInfo?.category || null,
             isSample: true,
           };
         }
+        // Regular product
         return {
-          productId: item.productId,
-          name: item.name,
-          size: item.size,
-          price: item.price,
-          quantity: item.quantity,
-          material: item.materialName || item.material,
-          width: item.width,
-          height: item.height,
-          widthCm: item.widthCm,
-          heightCm: item.heightCm,
-          areaM2: item.areaM2,
-          pricePerM2: item.pricePerM2,
-          wasteCost: item.wasteCost,
-          is25DAddOn: item.is25DAddOn,
+          productId: item.productId || null,
+          name: item.name || 'Unknown',
+          size: item.size || null,
+          price: item.price || 0,
+          quantity: item.quantity || 1,
+          materialName: item.materialName || item.material || null,
+          material: item.material || null,
+          width: item.width || null,
+          height: item.height || null,
+          widthCm: item.widthCm || null,
+          heightCm: item.heightCm || null,
+          areaM2: item.areaM2 || null,
+          pricePerM2: item.pricePerM2 || null,
+          wasteCost: item.wasteCost || null,
+          is25DAddOn: Boolean(item.is25DAddOn),
           isSample: false,
         };
       }) || [];
