@@ -1,3 +1,4 @@
+// app/checkout/checkout-client.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -19,7 +20,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 
 // ==========================================
-// ⚙️ KONFIGURASI TOKO (GANTI SESUAI DATA KAMU)
+// ⚙️ KONFIGURASI TOKO
 // ==========================================
 const STORE_CONFIG = {
   adminPhone: "6287705661978",
@@ -30,7 +31,6 @@ const STORE_CONFIG = {
       accountName: "CV. KREARTE MITRA ARTISAN",
     },
     qris: {
-      // Upload gambar QRIS ke folder 'public' lalu pakai path ini
       imageUrl: "/images/qris-krearte.png" 
     }
   }
@@ -57,6 +57,20 @@ interface CartItem {
   image?: string;
   addOns?: string[];
   is25DAddOn?: boolean;
+  // ✅ TAMBAHKAN: Flag untuk sample order
+  isSample?: boolean;
+  product?: { name: string; slug: string; image: string };
+  material?: { name: string; category: string };
+  customerInfo?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+    postalCode: string;
+    notes: string;
+  };
 }
 
 export default function CheckoutClient() {
@@ -85,10 +99,46 @@ export default function CheckoutClient() {
     phone: "",
   });
 
-  // Redirect jika belum login (opsional, bisa dimatikan untuk guest checkout)
+  // ✅ DETECT SAMPLE ORDER
+  const isSampleOrder = searchParams.get('source') === 'sample';
+  const [sampleData, setSampleData] = useState<CartItem | null>(null);
+
+  // ✅ Load sample order dari localStorage
+  useEffect(() => {
+    if (isSampleOrder) {
+      const savedSample = localStorage.getItem('krearte_pending_sample');
+      if (savedSample) {
+        try {
+          const sample = JSON.parse(savedSample);
+          setSampleData(sample);
+          
+          // Auto-fill form dengan data customer dari sample
+          if (sample.customerInfo) {
+            setFormData({
+              email: sample.customerInfo.email || "",
+              firstName: sample.customerInfo.firstName || "",
+              lastName: sample.customerInfo.lastName || "",
+              address: sample.customerInfo.address || "",
+              city: sample.customerInfo.city || "",
+              postalCode: sample.customerInfo.postalCode || "",
+              phone: sample.customerInfo.phone || "",
+            });
+          }
+        } catch (e) {
+          console.error("Failed to parse sample data:", e);
+          localStorage.removeItem('krearte_pending_sample');
+        }
+      }
+    }
+  }, [isSampleOrder]);
+
+  // ✅ Modified: Gunakan sample data jika ada, fallback ke cart biasa
+  const displayItems = sampleData ? [sampleData] : cart;
+  const displayTotal = sampleData ? sampleData.price : total;
+
+  // Redirect jika belum login (opsional)
   useEffect(() => {
     if (status === "unauthenticated" && !searchParams.get("guest")) {
-      // Uncomment baris bawah jika ingin mewajibkan login
       // router.push(`/login?callbackUrl=/checkout`);
     }
   }, [status, router, searchParams]);
@@ -98,14 +148,12 @@ export default function CheckoutClient() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Copy Rekening ke Clipboard
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Handle Submit Form & Lanjut ke Pembayaran
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName || !formData.phone || !formData.address) {
@@ -124,16 +172,20 @@ export default function CheckoutClient() {
     setError("");
 
     try {
-      // 1. Simpan Order ke Database (Supabase)
-      const orderData = {
-        email: formData.email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        address: formData.address,
-        city: formData.city,
-        postalCode: formData.postalCode,
-        phone: formData.phone,
-        items: cart?.map(item => ({
+      // ✅ Prepare order data (handle both sample & regular)
+      const itemsForOrder = displayItems?.map(item => {
+        if (item.isSample) {
+          return {
+            productId: item.product?.slug || "",
+            name: `Sample - ${item.product?.name}`,
+            size: item.size,
+            price: item.price,
+            quantity: item.quantity,
+            material: `${item.material?.name} (${item.material?.category})`,
+            isSample: true,
+          };
+        }
+        return {
           productId: item.productId,
           name: item.name,
           size: item.size,
@@ -148,13 +200,26 @@ export default function CheckoutClient() {
           pricePerM2: item.pricePerM2,
           wasteCost: item.wasteCost,
           is25DAddOn: item.is25DAddOn,
-        })) || [],
-        subtotal: total,
+          isSample: false,
+        };
+      }) || [];
+
+      const orderData = {
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        address: formData.address,
+        city: formData.city,
+        postalCode: formData.postalCode,
+        phone: formData.phone,
+        items: itemsForOrder,
+        subtotal: displayTotal,
         shipping: 0,
-        total: total,
+        total: displayTotal,
         paymentMethod: paymentMethod.toUpperCase(),
-        paymentStatus: "pending_verification", // Status baru untuk WA orders
+        paymentStatus: "pending_verification",
         userId: session?.user?.id || null,
+        isSampleOrder: !!sampleData,
       };
 
       const response = await fetch("/api/orders", {
@@ -171,7 +236,7 @@ export default function CheckoutClient() {
 
       const orderId = result.orderId || `ORD-${Date.now()}`;
 
-      // 2. Trigger n8n webhook (Opsional)
+      // Trigger n8n webhook (Opsional)
       if (process.env.N8N_WEBHOOK_URL) {
         await fetch(`${process.env.N8N_WEBHOOK_URL}/order-sync`, {
           method: "POST",
@@ -187,23 +252,27 @@ export default function CheckoutClient() {
             },
             total: orderData.total,
             paymentMethod: paymentMethod.toUpperCase(),
+            isSampleOrder: !!sampleData,
           }),
         }).catch(err => console.warn("n8n webhook failed:", err));
       }
 
-      // 3. Generate Pesan WhatsApp
-      const itemsList = cart?.map((item, idx) => 
-        `${idx + 1}. *${item.name}*\n   - Size: ${item.widthCm || Math.round((item.width||1)*100)}cm × ${item.heightCm || Math.round((item.height||1)*100)}cm\n   - Material: ${item.materialName || '-'}\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`
-      ).join("\n\n");
+      // ✅ Generate WhatsApp message (handle sample vs regular)
+      const itemsList = displayItems?.map((item, idx) => {
+        if (item.isSample) {
+          return `${idx + 1}. *SAMPLE - ${item.product?.name}*\n   - Material: ${item.material?.name}\n   - Category: ${item.material?.category}\n   - Size: A3 Sample (29.7 × 21cm)\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`;
+        }
+        return `${idx + 1}. *${item.name}*\n   - Size: ${item.widthCm || Math.round((item.width||1)*100)}cm × ${item.heightCm || Math.round((item.height||1)*100)}cm\n   - Material: ${item.materialName || '-'}\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`;
+      }).join("\n\n");
 
-      const message = `*🎨 ORDER BARU - KREARTE WEBSITE*
+      const message = `*🎨 ${sampleData ? 'SAMPLE ORDER' : 'ORDER BARU'} - KREARTE WEBSITE*
 *Order ID:* ${orderId}
 *Tanggal:* ${new Date().toLocaleDateString('id-ID')}
 
 *📦 Detail Pesanan:*
 ${itemsList}
 
-*💰 Total Tagihan:* ${formatCurrency(total)}
+*💰 Total Tagihan:* ${formatCurrency(displayTotal)}
 *🏦 Metode Bayar:* ${paymentMethod.toUpperCase()}
 
 *👤 Data Pemesan:*
@@ -211,16 +280,23 @@ Nama: ${formData.firstName} ${formData.lastName}
 Email: ${formData.email || '-'}
 No. HP: ${formData.phone}
 Alamat: ${formData.address}, ${formData.city} ${formData.postalCode}
+${formData.notes ? `Notes: ${formData.notes}` : ''}
 
-Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek dan diproses ya. Terima kasih! 🙏`;
+Halo Admin, ${sampleData ? 'saya ingin order sample seperti di atas.' : 'saya sudah melakukan pembayaran sesuai nominal di atas.'} Mohon dicek dan diproses ya. Terima kasih! 🙏`;
 
       const encodedMessage = encodeURIComponent(message);
       const waUrl = `https://wa.me/${STORE_CONFIG.adminPhone}?text=${encodedMessage}`;
 
-      // 4. Buka WhatsApp & Clear Cart
+      // Buka WhatsApp
       window.open(waUrl, "_blank");
       
-      clearCart();
+      // ✅ Cleanup: Hapus localStorage jika sample order
+      if (sampleData) {
+        localStorage.removeItem('krearte_pending_sample');
+      } else {
+        clearCart();
+      }
+      
       setOrderPlaced(true);
       setStep("done");
       
@@ -232,7 +308,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
     }
   };
 
-  // ✅ Helper: Calculate waste (sama seperti code asli kamu)
+  // ✅ Helper: Calculate waste (hanya untuk produk biasa)
   const calculateWasteInfo = (item: CartItem) => {
     const widthCm = item.widthCm || (item.width ? Math.round(item.width * 100) : 100);
     const heightCm = item.heightCm || (item.height ? Math.round(item.height * 100) : 100);
@@ -256,8 +332,8 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
     );
   }
 
-  // Empty Cart State
-  if ((cart?.length || 0) === 0 && !orderPlaced) {
+  // Empty State (handle both cart & sample)
+  if ((displayItems?.length || 0) === 0 && !orderPlaced) {
     return (
       <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-lg mx-auto px-6">
@@ -271,7 +347,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
     );
   }
 
-  // Success State (Order Placed)
+  // Success State
   if (orderPlaced) {
     return (
       <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
@@ -297,9 +373,9 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
       
       {/* Back Navigation */}
       <div className="container mx-auto px-6 md:px-12 py-6">
-        <Link href="/cart" className="inline-flex items-center text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors">
+        <Link href={sampleData ? `/product/${sampleData.product?.slug}` : "/cart"} className="inline-flex items-center text-sm font-light text-krearte-gray-600 hover:text-krearte-black transition-colors">
           <ChevronLeft className="w-4 h-4 mr-1" />
-          Back to Cart
+          {sampleData ? "Back to Product" : "Back to Cart"}
         </Link>
       </div>
 
@@ -310,7 +386,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
             {/* LEFT: Checkout Form / Payment / Done */}
             <div>
               <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="font-sans text-3xl md:text-4xl font-light mb-8">
-                {step === "form" ? "Checkout" : step === "payment" ? "Pembayaran" : "Selesai"}
+                {step === "form" ? (sampleData ? "Confirm Sample Order" : "Checkout") : step === "payment" ? "Pembayaran" : "Selesai"}
               </motion.h1>
 
               {/* STEP 1: FORM DATA PEMESAN */}
@@ -373,7 +449,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
                   </div>
 
                   <button type="submit" disabled={isProcessing} className="w-full py-4 text-sm font-medium bg-krearte-black text-krearte-white hover:bg-krearte-charcoal transition-all duration-300 disabled:opacity-50">
-                    Lanjut ke Pembayaran
+                    {sampleData ? "Confirm & Proceed to Payment" : "Continue to Payment"}
                   </button>
                 </form>
               )}
@@ -440,7 +516,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
                     </button>
                     <button type="submit" disabled={isProcessing} className="flex-[2] bg-green-600 text-krearte-white py-4 rounded-lg font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
                       {isProcessing ? <Loader2 className="animate-spin w-5 h-5" /> : <Phone className="w-5 h-5" />}
-                      Bayar & Konfirmasi via WhatsApp
+                      {sampleData ? "Confirm Sample via WhatsApp" : "Bayar & Konfirmasi via WhatsApp"}
                     </button>
                   </div>
                 </form>
@@ -454,53 +530,80 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
                 
                 {/* Items List */}
                 <div className="space-y-6 mb-8 pb-8 border-b border-krearte-gray-200">
-                  {cart?.map((item: CartItem) => {
-                    const wasteInfo = calculateWasteInfo(item);
-                    const materialCost = (item.pricePerM2 || 0) * wasteInfo.printArea;
-                    const wasteCost = wasteInfo.wasteArea * (item.wasteCost || 80000);
-                    const effect25DCost = item.addOns?.includes('2.5D Print Effect') ? 500000 * wasteInfo.printArea : 0;
+                  {displayItems?.map((item: any, idx: number) => {
+                    const isSample = item.isSample;
+                    const wasteInfo = !isSample ? calculateWasteInfo(item as CartItem) : null;
                     
                     return (
-                      <div key={item.id} className="space-y-3">
+                      <div key={isSample ? 'sample' : item.id} className="space-y-3">
                         <div className="flex gap-4">
                           <div className="w-16 h-20 bg-krearte-gray-100 rounded overflow-hidden flex-shrink-0">
-                            {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><span className="text-lg text-krearte-gray-400">{item.name?.charAt(0)}</span></div>}
+                            {item.image ? (
+                              <img src={item.image} alt={isSample ? item.product?.name : item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-lg text-krearte-gray-400">{(isSample ? item.product?.name : item.name)?.charAt(0)}</span>
+                              </div>
+                            )}
                           </div>
                           <div className="flex-1">
-                            <h3 className="font-sans text-sm font-normal mb-1">{item.name}</h3>
+                            <h3 className="font-sans text-sm font-normal mb-1">
+                              {isSample ? `Sample - ${item.product?.name}` : item.name}
+                            </h3>
                             <p className="text-xs font-light text-krearte-gray-500 mb-1">
-                              Size: {item.widthCm || (item.width ? Math.round(item.width * 100) : 100)}cm × {item.heightCm || (item.height ? Math.round(item.height * 100) : 100)}cm
-                              <span className="text-krearte-gray-400 ml-1">({wasteInfo.printArea.toFixed(2)} m²)</span>
+                              {isSample ? item.size : `Size: ${item.widthCm || Math.round((item.width||1)*100)}cm × ${item.heightCm || Math.round((item.height||1)*100)}cm`}
+                              {!isSample && wasteInfo && <span className="text-krearte-gray-400 ml-1">({wasteInfo.printArea.toFixed(2)} m²)</span>}
                             </p>
-                            {item.materialName && <p className="text-xs font-light text-krearte-gray-500">Material: {item.materialName}</p>}
-                            {item.addOns && item.addOns.length > 0 && <p className="text-xs font-light text-krearte-gray-500">+ {item.addOns.join(', ')}</p>}
+                            {isSample ? (
+                              <>
+                                <p className="text-xs font-light text-krearte-gray-500">Material: {item.material?.name}</p>
+                                <p className="text-xs font-light text-krearte-gray-500">Category: {item.material?.category}</p>
+                              </>
+                            ) : (
+                              <>
+                                {item.materialName && <p className="text-xs font-light text-krearte-gray-500">Material: {item.materialName}</p>}
+                                {item.addOns && item.addOns.length > 0 && <p className="text-xs font-light text-krearte-gray-500">+ {item.addOns.join(', ')}</p>}
+                              </>
+                            )}
                             <p className="text-xs text-krearte-gray-500 mt-1">Qty: {item.quantity}</p>
                           </div>
                         </div>
 
-                        {/* Price Breakdown */}
-                        <div className="ml-20 p-3 bg-krearte-gray-50 rounded text-xs space-y-1.5">
-                          <div className="flex justify-between text-krearte-gray-600">
-                            <span>Material ({formatCurrency(item.pricePerM2 || 0)}/m² × {wasteInfo.printArea.toFixed(2)} m²):</span>
-                            <span className="font-normal">{formatCurrency(materialCost)}</span>
-                          </div>
-                          {item.wasteCost && item.wasteCost > 0 && (
+                        {/* Price Breakdown - Regular products only */}
+                        {!isSample && wasteInfo && (
+                          <div className="ml-20 p-3 bg-krearte-gray-50 rounded text-xs space-y-1.5">
                             <div className="flex justify-between text-krearte-gray-600">
-                              <span>Waste ({wasteInfo.wasteArea.toFixed(2)} m² × {formatCurrency(item.wasteCost)}/m²):</span>
-                              <span className="font-normal">{formatCurrency(wasteCost)}</span>
+                              <span>Material ({formatCurrency(item.pricePerM2 || 0)}/m² × {wasteInfo.printArea.toFixed(2)} m²):</span>
+                              <span className="font-normal">{formatCurrency((item.pricePerM2 || 0) * wasteInfo.printArea)}</span>
                             </div>
-                          )}
-                          {item.addOns?.includes('2.5D Print Effect') && (
-                            <div className="flex justify-between text-krearte-gray-600">
-                              <span>2.5D Effect ({formatCurrency(500000)}/m² × {wasteInfo.printArea.toFixed(2)} m²):</span>
-                              <span className="font-normal">{formatCurrency(effect25DCost)}</span>
+                            {item.wasteCost && item.wasteCost > 0 && (
+                              <div className="flex justify-between text-krearte-gray-600">
+                                <span>Waste ({wasteInfo.wasteArea.toFixed(2)} m² × {formatCurrency(item.wasteCost)}/m²):</span>
+                                <span className="font-normal">{formatCurrency(wasteInfo.wasteArea * item.wasteCost)}</span>
+                              </div>
+                            )}
+                            {item.addOns?.includes('2.5D Print Effect') && (
+                              <div className="flex justify-between text-krearte-gray-600">
+                                <span>2.5D Effect ({formatCurrency(500000)}/m² × {wasteInfo.printArea.toFixed(2)} m²):</span>
+                                <span className="font-normal">{formatCurrency(500000 * wasteInfo.printArea)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-krearte-black font-medium pt-2 border-t border-krearte-gray-200 mt-2">
+                              <span>Subtotal (Qty {item.quantity}):</span>
+                              <span>{formatCurrency(item.price * item.quantity)}</span>
                             </div>
-                          )}
-                          <div className="flex justify-between text-krearte-black font-medium pt-2 border-t border-krearte-gray-200 mt-2">
-                            <span>Subtotal (Qty {item.quantity}):</span>
-                            <span>{formatCurrency(item.price * item.quantity)}</span>
                           </div>
-                        </div>
+                        )}
+                        
+                        {/* Simple price for sample */}
+                        {isSample && (
+                          <div className="ml-20 p-3 bg-krearte-gray-50 rounded text-xs">
+                            <div className="flex justify-between text-krearte-black font-medium">
+                              <span>Subtotal:</span>
+                              <span>{formatCurrency(item.price)}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -510,7 +613,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
                 <div className="space-y-4">
                   <div className="flex justify-between text-sm">
                     <span className="font-light text-krearte-gray-600">Subtotal</span>
-                    <span className="font-normal text-krearte-black">{formatCurrency(total)}</span>
+                    <span className="font-normal text-krearte-black">{formatCurrency(displayTotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="font-light text-krearte-gray-600">Shipping</span>
@@ -518,7 +621,7 @@ Halo Admin, saya sudah melakukan pembayaran sesuai nominal di atas. Mohon dicek 
                   </div>
                   <div className="flex justify-between text-lg pt-4 border-t border-krearte-gray-200">
                     <span className="font-normal text-krearte-black">Total</span>
-                    <span className="font-normal text-krearte-black">{formatCurrency(total)}</span>
+                    <span className="font-normal text-krearte-black">{formatCurrency(displayTotal)}</span>
                   </div>
                 </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Package } from "lucide-react";
+import { ArrowLeft, Check } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 interface Product {
@@ -31,7 +31,6 @@ export default function SampleOrderPage() {
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
   
   const [formData, setFormData] = useState({
     firstName: "",
@@ -44,17 +43,14 @@ export default function SampleOrderPage() {
     notes: "",
   });
 
-  // Sample prices based on pricelist 2026
   const getSamplePrice = (material: Material | null) => {
-    if (!material) return 50000; // Default price
+    if (!material) return 50000;
     
-    // Auto-detect based on category
     if (material.category.includes("Non-Woven")) return 75000;
     if (material.category.includes("Fabric Back")) return 75000;
     if (material.category.includes("Special Effect")) return 65000;
     if (material.category.includes("Metallic")) return 65000;
     
-    // Default for PVC, Standard, etc.
     return material.samplePriceA3 || 50000;
   };
 
@@ -63,21 +59,18 @@ export default function SampleOrderPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch product
         const productRes = await fetch(`/api/products/${params.slug}`);
         const productResult = await productRes.json();
         
         if (productResult.success) {
           setProduct(productResult.data);
           
-          // Fetch materials for this product
           const materialsRes = await fetch(`/api/products/${params.slug}/materials`);
           const materialsResult = await materialsRes.json();
           
           if (materialsResult.success) {
             setMaterials(materialsResult.materials || []);
             
-            // Set first material as default
             if (materialsResult.materials?.length > 0) {
               setSelectedMaterial(materialsResult.materials[0]);
             }
@@ -100,35 +93,51 @@ export default function SampleOrderPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // ✅ MODIFIED: Langsung redirect ke checkout page
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      // Create sample order
-      const response = await fetch("/api/sample-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productSlug: params.slug,
-          productName: product?.name,
-          materialId: selectedMaterial?.id,
-          materialName: selectedMaterial?.name,
-          samplePrice: samplePrice,
-          ...formData,
-        }),
-      });
+      // ✅ Prepare sample order data
+      const sampleOrder = {
+        isSample: true,
+        product: {
+          id: product?.id || "",
+          name: product?.name || "",
+          slug: params.slug || "",
+          image: product?.images?.find(img => !img.endsWith('.mp4') && !img.endsWith('.webm')) || "",
+        },
+        material: {
+          id: selectedMaterial?.id || "",
+          name: selectedMaterial?.name || "",
+          category: selectedMaterial?.category || "",
+        },
+        price: samplePrice,
+        quantity: 1,
+        size: "A3 Sample (29.7 × 21cm)",
+        customerInfo: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          postalCode: formData.postalCode,
+          notes: formData.notes,
+        },
+        createdAt: new Date().toISOString(),
+      };
 
-      const result = await response.json();
+      // ✅ Simpan ke localStorage
+      localStorage.setItem('krearte_pending_sample', JSON.stringify(sampleOrder));
 
-      if (!result.success) {
-        throw new Error(result.error || "Failed to submit sample order");
-      }
-
-      setSuccess(true);
+      // ✅ Redirect ke checkout page
+      router.push('/checkout?source=sample');
+      
     } catch (err: any) {
       console.error("Sample order error:", err);
-      alert("Failed to submit sample order. Please try again.");
+      alert("Failed to process sample order. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -142,44 +151,8 @@ export default function SampleOrderPage() {
     );
   }
 
-  if (success) {
-    return (
-      <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-lg mx-auto px-6 py-24"
-        >
-          <div className="w-20 h-20 bg-krearte-black rounded-full flex items-center justify-center mx-auto mb-8">
-            <Check className="w-10 h-10 text-krearte-white" />
-          </div>
-          <h1 className="font-sans text-4xl font-light mb-6">Sample Order Submitted!</h1>
-          <p className="text-krearte-gray-600 font-light leading-relaxed mb-8">
-            Thank you for your sample order. We'll process it within 1-2 business days 
-            and ship it to your address. You'll receive a confirmation email shortly.
-          </p>
-          <div className="flex flex-col gap-4">
-            <Link
-              href={`/product/${params.slug}`}
-              className="inline-flex items-center justify-center px-8 py-4 bg-krearte-black text-krearte-white rounded-full text-sm font-medium hover:bg-krearte-charcoal transition-colors"
-            >
-              Back to Product
-            </Link>
-            <Link
-              href="/collection/wallcovering"
-              className="inline-flex items-center justify-center px-8 py-4 border border-krearte-black text-krearte-black rounded-full text-sm font-medium hover:bg-krearte-black hover:text-krearte-white transition-colors"
-            >
-              Browse Collection
-            </Link>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-krearte-cream">
-      {/* Back Navigation */}
       <div className="container mx-auto px-6 md:px-12 py-6">
         <Link
           href={`/product/${params.slug}`}
@@ -194,24 +167,16 @@ export default function SampleOrderPage() {
         <div className="container mx-auto px-6 md:px-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 md:gap-24">
             
-            {/* LEFT: Product Info */}
             <div>
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <span className="text-sm font-light text-krearte-gray-600 mb-4 block">
-                  Order Sample
-                </span>
+              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}>
+                <span className="text-sm font-light text-krearte-gray-600 mb-4 block">Order Sample</span>
                 <h1 className="font-sans text-4xl md:text-5xl font-light mb-6 text-krearte-black">
                   {product?.name}
                 </h1>
                 
-                {/* ✅ Image with 16:9 aspect ratio - only show images (not videos) */}
                 <div className="aspect-[16/9] bg-krearte-gray-100 rounded-lg mb-8 overflow-hidden">
                   {product?.images && product.images.length > 0 ? (
                     (() => {
-                      // Find first image that's NOT a video
                       const firstImage = product.images.find(
                         img => !img.endsWith('.mp4') && !img.endsWith('.webm')
                       ) || product.images[0];
@@ -231,7 +196,6 @@ export default function SampleOrderPage() {
                   )}
                 </div>
 
-                {/* Material Selector */}
                 {materials.length > 0 && (
                   <div className="mb-6">
                     <label className="block text-sm font-normal text-krearte-black mb-3">
@@ -264,7 +228,6 @@ export default function SampleOrderPage() {
                   </div>
                 )}
 
-                {/* Sample Info */}
                 <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
                   <h3 className="font-sans text-lg font-normal mb-4">What's Included</h3>
                   <ul className="space-y-3 text-krearte-gray-600 font-light">
@@ -295,7 +258,6 @@ export default function SampleOrderPage() {
               </motion.div>
             </div>
 
-            {/* RIGHT: Order Form */}
             <div className="lg:py-12">
               <motion.div
                 initial={{ opacity: 0, y: 30 }}
@@ -308,9 +270,7 @@ export default function SampleOrderPage() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-normal text-krearte-black mb-2">
-                        First Name *
-                      </label>
+                      <label className="block text-sm font-normal text-krearte-black mb-2">First Name *</label>
                       <input
                         type="text"
                         name="firstName"
@@ -322,9 +282,7 @@ export default function SampleOrderPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-normal text-krearte-black mb-2">
-                        Last Name *
-                      </label>
+                      <label className="block text-sm font-normal text-krearte-black mb-2">Last Name *</label>
                       <input
                         type="text"
                         name="lastName"
@@ -338,9 +296,7 @@ export default function SampleOrderPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-krearte-black mb-2">
-                      Email *
-                    </label>
+                    <label className="block text-sm font-normal text-krearte-black mb-2">Email *</label>
                     <input
                       type="email"
                       name="email"
@@ -353,24 +309,20 @@ export default function SampleOrderPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-krearte-black mb-2">
-                      Phone Number *
-                    </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
-                        placeholder="+62 xxx xxxx xxxx"
-                      />
+                    <label className="block text-sm font-normal text-krearte-black mb-2">Phone Number *</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-3 bg-krearte-gray-50 border border-krearte-gray-200 focus:outline-none focus:border-krearte-black transition-colors font-light"
+                      placeholder="+62 xxx xxxx xxxx"
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-krearte-black mb-2">
-                      Shipping Address *
-                    </label>
+                    <label className="block text-sm font-normal text-krearte-black mb-2">Shipping Address *</label>
                     <textarea
                       name="address"
                       value={formData.address}
@@ -384,9 +336,7 @@ export default function SampleOrderPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-normal text-krearte-black mb-2">
-                        City *
-                      </label>
+                      <label className="block text-sm font-normal text-krearte-black mb-2">City *</label>
                       <input
                         type="text"
                         name="city"
@@ -398,9 +348,7 @@ export default function SampleOrderPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-normal text-krearte-black mb-2">
-                        Postal Code *
-                      </label>
+                      <label className="block text-sm font-normal text-krearte-black mb-2">Postal Code *</label>
                       <input
                         type="text"
                         name="postalCode"
@@ -414,9 +362,7 @@ export default function SampleOrderPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-krearte-black mb-2">
-                      Notes (Optional)
-                    </label>
+                    <label className="block text-sm font-normal text-krearte-black mb-2">Notes (Optional)</label>
                     <textarea
                       name="notes"
                       value={formData.notes}
@@ -436,11 +382,11 @@ export default function SampleOrderPage() {
                         : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"
                     }`}
                   >
-                    {submitting ? "Submitting..." : `Order Sample - ${formatCurrency(samplePrice)}`}
+                    {submitting ? "Processing..." : `Order Sample - ${formatCurrency(samplePrice)}`}
                   </button>
 
                   <p className="text-xs text-krearte-gray-500 text-center">
-                    Shipping calculated at checkout. Delivery in 3-5 business days.
+                    You'll be redirected to payment page to complete your order.
                   </p>
                 </form>
               </motion.div>
