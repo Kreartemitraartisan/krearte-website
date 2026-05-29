@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 }
 
 // =========================
-// ✅ POST: Create new order (FIXED)
+// ✅ POST: Create new order
 // =========================
 export async function POST(request: Request) {
   try {
@@ -84,11 +84,11 @@ export async function POST(request: Request) {
 
     const orderNumber = generateOrderNumber();
 
-    // ✅ Prepare items - pastikan semua field ada value (null jika tidak ada)
+    // ✅ Prepare items - pastikan semua field ada value
     const orderItems = items.map((item: any) => {
       return {
         name: item.name || "Unknown Product",
-        size: item.size || `${item.widthCm || 100}cm × ${item.heightCm || 100}cm`,
+        size: item.size || "A3 Sample",
         price: parseFloat(item.price) || 0,
         quantity: parseInt(item.quantity) || 1,
         
@@ -97,9 +97,9 @@ export async function POST(request: Request) {
           ? item.productId 
           : null,
         
-        // ✅ Material fields - set to null if not exists
+        // ✅ Material fields
         materialId: item.materialId || null,
-        materialName: item.materialName || item.material || null,
+        materialName: item.materialName || null,
         
         // ✅ Dimensions - parse to numbers or null
         width: item.width ? parseFloat(item.width) : null,
@@ -112,11 +112,11 @@ export async function POST(request: Request) {
         
         // ✅ Boolean fields
         is25DAddOn: Boolean(item.is25DAddOn),
-        isSample: Boolean(isSampleOrder),
+        isSample: Boolean(item.isSample || isSampleOrder),
       };
     });
 
-    // ✅ Create order
+    // ✅ Create order - pastikan struktur data sesuai schema
     const order = await prisma.order.create({
       data: {
         orderNumber,
@@ -136,6 +136,7 @@ export async function POST(request: Request) {
         status: "pending",
         notes: isSampleOrder ? "Sample Order - A3 Swatch" : undefined,
         
+        // ✅ Create items dengan struktur yang benar
         items: {
           create: orderItems,
         },
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // ✅ Webhook
+    // ✅ Webhook ke n8n
     if (process.env.N8N_WEBHOOK_URL) {
       fetch(process.env.N8N_WEBHOOK_URL, {
         method: "POST",
@@ -194,6 +195,7 @@ export async function POST(request: Request) {
 
 // ✅ Helper: Validate UUID
 function isValidUuid(str: string): boolean {
+  if (!str) return false;
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(str);
 }
