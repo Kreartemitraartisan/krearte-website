@@ -36,6 +36,7 @@ const STORE_CONFIG = {
   }
 };
 
+// ✅ INTERFACE LENGKAP (Tanpa Duplicate Identifier)
 interface CartItem {
   id: string;
   productId: string;
@@ -43,7 +44,7 @@ interface CartItem {
   slug: string;
   materialId?: string;
   materialName?: string;
-  material?: string;
+  material?: string; // String biasa (misal: "PVC Standard")
   pricePerM2?: number;
   wasteCost?: number;
   areaM2?: number;
@@ -57,10 +58,11 @@ interface CartItem {
   image?: string;
   addOns?: string[];
   is25DAddOn?: boolean;
-  // ✅ TAMBAHKAN: Flag untuk sample order
+  
+  // ✅ Tambahan untuk Sample Order Flow
   isSample?: boolean;
-  product?: { name: string; slug: string; image: string };
-  material?: { name: string; category: string };
+  product?: { name: string; slug: string; image: string }; // Info produk untuk sample
+  materialInfo?: { name: string; category: string }; // Info material untuk sample (pake nama 'materialInfo' biar gak bentrok)
   customerInfo?: {
     firstName: string;
     lastName: string;
@@ -97,6 +99,7 @@ export default function CheckoutClient() {
     city: "",
     postalCode: "",
     phone: "",
+    notes: "",
   });
 
   // ✅ DETECT SAMPLE ORDER
@@ -122,6 +125,7 @@ export default function CheckoutClient() {
               city: sample.customerInfo.city || "",
               postalCode: sample.customerInfo.postalCode || "",
               phone: sample.customerInfo.phone || "",
+              notes: sample.customerInfo.notes || "",
             });
           }
         } catch (e) {
@@ -132,8 +136,11 @@ export default function CheckoutClient() {
     }
   }, [isSampleOrder]);
 
-  // ✅ Modified: Gunakan sample data jika ada, fallback ke cart biasa
-  const displayItems = sampleData ? [sampleData] : cart;
+  // ✅ Fix Type: Explicitly type as CartItem[]
+  const displayItems: CartItem[] = sampleData 
+    ? [sampleData as CartItem] 
+    : (cart as CartItem[] || []);
+    
   const displayTotal = sampleData ? sampleData.price : total;
 
   // Redirect jika belum login (opsional)
@@ -173,7 +180,8 @@ export default function CheckoutClient() {
 
     try {
       // ✅ Prepare order data (handle both sample & regular)
-      const itemsForOrder = displayItems?.map(item => {
+      // Explicitly cast item to CartItem
+      const itemsForOrder = displayItems?.map((item: CartItem) => {
         if (item.isSample) {
           return {
             productId: item.product?.slug || "",
@@ -181,7 +189,8 @@ export default function CheckoutClient() {
             size: item.size,
             price: item.price,
             quantity: item.quantity,
-            material: `${item.material?.name} (${item.material?.category})`,
+            // Use materialInfo for sample
+            material: `${item.materialInfo?.name} (${item.materialInfo?.category})`,
             isSample: true,
           };
         }
@@ -258,9 +267,9 @@ export default function CheckoutClient() {
       }
 
       // ✅ Generate WhatsApp message (handle sample vs regular)
-      const itemsList = displayItems?.map((item, idx) => {
+      const itemsList = displayItems?.map((item: CartItem, idx: number) => {
         if (item.isSample) {
-          return `${idx + 1}. *SAMPLE - ${item.product?.name}*\n   - Material: ${item.material?.name}\n   - Category: ${item.material?.category}\n   - Size: A3 Sample (29.7 × 21cm)\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`;
+          return `${idx + 1}. *SAMPLE - ${item.product?.name}*\n   - Material: ${item.materialInfo?.name}\n   - Category: ${item.materialInfo?.category}\n   - Size: A3 Sample (29.7 × 21cm)\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`;
         }
         return `${idx + 1}. *${item.name}*\n   - Size: ${item.widthCm || Math.round((item.width||1)*100)}cm × ${item.heightCm || Math.round((item.height||1)*100)}cm\n   - Material: ${item.materialName || '-'}\n   - Qty: ${item.quantity}\n   - Harga: ${formatCurrency(item.price)}`;
       }).join("\n\n");
@@ -290,7 +299,7 @@ Halo Admin, ${sampleData ? 'saya ingin order sample seperti di atas.' : 'saya su
       // Buka WhatsApp
       window.open(waUrl, "_blank");
       
-      // ✅ Cleanup: Hapus localStorage jika sample order
+      // ✅ Cleanup: Hapus localStorage jika sample order, clear cart jika regular
       if (sampleData) {
         localStorage.removeItem('krearte_pending_sample');
       } else {
@@ -333,7 +342,7 @@ Halo Admin, ${sampleData ? 'saya ingin order sample seperti di atas.' : 'saya su
   }
 
   // Empty State (handle both cart & sample)
-  if ((displayItems?.length || 0) === 0 && !orderPlaced) {
+  if (displayItems.length === 0 && !orderPlaced) {
     return (
       <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-lg mx-auto px-6">
@@ -530,9 +539,9 @@ Halo Admin, ${sampleData ? 'saya ingin order sample seperti di atas.' : 'saya su
                 
                 {/* Items List */}
                 <div className="space-y-6 mb-8 pb-8 border-b border-krearte-gray-200">
-                  {displayItems?.map((item: any, idx: number) => {
-                    const isSample = item.isSample;
-                    const wasteInfo = !isSample ? calculateWasteInfo(item as CartItem) : null;
+                  {displayItems.map((item: CartItem, idx: number) => {
+                    const isSample = item.isSample === true;
+                    const wasteInfo = !isSample ? calculateWasteInfo(item) : null;
                     
                     return (
                       <div key={isSample ? 'sample' : item.id} className="space-y-3">
@@ -556,8 +565,8 @@ Halo Admin, ${sampleData ? 'saya ingin order sample seperti di atas.' : 'saya su
                             </p>
                             {isSample ? (
                               <>
-                                <p className="text-xs font-light text-krearte-gray-500">Material: {item.material?.name}</p>
-                                <p className="text-xs font-light text-krearte-gray-500">Category: {item.material?.category}</p>
+                                <p className="text-xs font-light text-krearte-gray-500">Material: {item.materialInfo?.name}</p>
+                                <p className="text-xs font-light text-krearte-gray-500">Category: {item.materialInfo?.category}</p>
                               </>
                             ) : (
                               <>
