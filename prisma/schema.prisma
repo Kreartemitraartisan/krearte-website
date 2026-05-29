@@ -1,4 +1,3 @@
-// This is your Prisma schema file
 generator client {
   provider = "prisma-client-js"
 }
@@ -167,7 +166,9 @@ model Order {
 model OrderItem {
   id        String @id @default(cuid())
   orderId   String
-  productId String
+  // ✅ FIX: productId bisa null untuk sample orders
+  productId String?
+  
   name      String
   size      String
   price     Float
@@ -185,10 +186,14 @@ model OrderItem {
   wasteCost    Float?
   areaM2       Float?
   is25DAddOn   Boolean @default(false)
+  
+  // ✅ NEW: Flag untuk sample order
+  isSample   Boolean @default(false)
 
   // Relations
   order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product  Product   @relation(fields: [productId], references: [id], onDelete: Restrict) // ❌ Restrict: jangan hapus product kalau sudah ada order
+  // ✅ FIX: onDelete Restrict hanya jika productId ada
+  product  Product?   @relation(fields: [productId], references: [id], onDelete: Restrict)
   material Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
