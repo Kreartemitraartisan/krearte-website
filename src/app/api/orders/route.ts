@@ -1,4 +1,3 @@
-// app/api/orders/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/utils";
@@ -44,7 +43,7 @@ export async function GET(request: Request) {
 }
 
 // =========================
-// ✅ POST: Create new order (FIXED)
+// ✅ POST: Create new order (FIXED for Sample Orders)
 // =========================
 export async function POST(request: Request) {
   try {
@@ -64,9 +63,10 @@ export async function POST(request: Request) {
       shipping,
       total,
       userId,
-      // ✅ NEW: Payment fields for WhatsApp orders
-      paymentMethod = "WHATSAPP", // Default: WhatsApp manual payment
-      paymentStatus = "pending_verification", // Default status for WA orders
+      // ✅ NEW: Payment & Sample fields
+      paymentMethod = "WHATSAPP",
+      paymentStatus = "pending_verification",
+      isSampleOrder = false, // ✅ Flag untuk sample order
     } = body;
 
     // ✅ Validation
@@ -87,7 +87,46 @@ export async function POST(request: Request) {
     // ✅ Generate unique order number
     const orderNumber = generateOrderNumber();
 
-    // ✅ Create order in database with ALL wallpaper-specific fields
+    // ✅ Prepare items for database
+    // ✅ Handle nullable productId for sample orders
+    const orderItems = items.map((item: any) => {
+      // Base required fields
+      const orderItem: any = {
+        name: item.name,
+        size: item.size || `${item.widthCm || 100}cm × ${item.heightCm || 100}cm`,
+        price: parseFloat(item.price) || 0,
+        quantity: item.quantity || 1,
+      };
+
+      // ✅ ONLY add productId if it's a valid UUID AND not a sample
+      // Sample orders don't need to reference actual products
+      if (!isSampleOrder && item.productId && isValidUuid(item.productId)) {
+        orderItem.productId = item.productId;
+      }
+
+      // ✅ Add wallpaper-specific fields only if they exist
+      if (item.materialId) orderItem.materialId = item.materialId;
+      if (item.materialName) orderItem.materialName = item.materialName;
+      if (item.material) orderItem.materialName = item.material; // fallback
+      if (item.width) orderItem.width = parseFloat(item.width);
+      if (item.height) orderItem.height = parseFloat(item.height);
+      if (item.widthCm) orderItem.widthCm = parseInt(item.widthCm);
+      if (item.heightCm) orderItem.heightCm = parseInt(item.heightCm);
+      if (item.areaM2) orderItem.areaM2 = parseFloat(item.areaM2);
+      if (item.pricePerM2) orderItem.pricePerM2 = parseFloat(item.pricePerM2);
+      if (item.wasteCost) orderItem.wasteCost = parseFloat(item.wasteCost);
+      if (item.is25DAddOn) orderItem.is25DAddOn = item.is25DAddOn;
+      
+      // ✅ Add sample-specific fields
+      if (isSampleOrder) {
+        orderItem.isSample = true;
+        orderItem.notes = item.notes || "Sample order";
+      }
+
+      return orderItem;
+    });
+
+    // ✅ Create order in database
     const order = await prisma.order.create({
       data: {
         orderNumber,
@@ -106,30 +145,14 @@ export async function POST(request: Request) {
         // ✅ NEW: Payment info
         paymentMethod,
         paymentStatus,
-        status: "pending", // Default order status
+        status: "pending",
         
-        // ✅ Create order items with complete wallpaper data
+        // ✅ Flag for sample orders
+        notes: isSampleOrder ? "Sample Order - A3 Swatch" : undefined,
+        
+        // ✅ Create order items
         items: {
-          create: items.map((item: any) => ({
-            // Required fields
-            productId: item.productId,
-            name: item.name,
-            size: item.size || `${item.widthCm || 100}cm × ${item.heightCm || 100}cm`,
-            price: parseFloat(item.price) || 0,
-            quantity: item.quantity || 1,
-            
-            // ✅ Wallpaper-specific fields (save for production tracking)
-            materialId: item.materialId || null,
-            materialName: item.materialName || item.material || null,
-            width: item.width ? parseFloat(item.width) : null,
-            height: item.height ? parseFloat(item.height) : null,
-            widthCm: item.widthCm ? parseInt(item.widthCm) : null,
-            heightCm: item.heightCm ? parseInt(item.heightCm) : null,
-            areaM2: item.areaM2 ? parseFloat(item.areaM2) : null,
-            pricePerM2: item.pricePerM2 ? parseFloat(item.pricePerM2) : null,
-            wasteCost: item.wasteCost ? parseFloat(item.wasteCost) : null,
-            is25DAddOn: item.is25DAddOn || false,
-          })),
+          create: orderItems,
         },
       },
       include: { 
@@ -144,9 +167,10 @@ export async function POST(request: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          event: "order.created",
+          event: isSampleOrder ? "sample.created" : "order.created",
           orderId: order.id,
           orderNumber: order.orderNumber,
+          isSampleOrder,
           customer: {
             name: `${order.firstName} ${order.lastName}`,
             email: order.email,
@@ -159,11 +183,10 @@ export async function POST(request: Request) {
           paymentStatus: (order as any).paymentStatus,
           timestamp: new Date().toISOString(),
         }),
-        // Timeout 5 seconds agar tidak nge-hang kalau n8n lambat
       }).catch(err => console.warn("⚠️ n8n webhook failed:", err));
     }
 
-    console.log(`✅ Order created: ${orderNumber} (Total: Rp ${order.total.toLocaleString('id-ID')})`);
+    console.log(`✅ ${isSampleOrder ? 'Sample' : 'Order'} created: ${orderNumber} (Total: Rp ${order.total.toLocaleString('id-ID')})`);
 
     return NextResponse.json({ 
       success: true, 
@@ -177,7 +200,6 @@ export async function POST(request: Request) {
 
     // ✅ Handle Prisma specific errors
     if (error?.code === "P2002") {
-      // Unique constraint failed (order number duplicate - very rare)
       return NextResponse.json(
         { success: false, error: "Order number conflict. Please try again." },
         { status: 409 }
@@ -186,8 +208,12 @@ export async function POST(request: Request) {
 
     if (error?.code === "P2003") {
       // Foreign key constraint (invalid product/user ID)
+      // ✅ More helpful error message
       return NextResponse.json(
-        { success: false, error: "Invalid product or user reference" },
+        { 
+          success: false, 
+          error: "Invalid reference in order items. Please check product IDs or try submitting as sample order." 
+        },
         { status: 400 }
       );
     }
@@ -203,10 +229,15 @@ export async function POST(request: Request) {
       { 
         success: false, 
         error: error.message || "Failed to create order",
-        // Hanya tampilkan detail error di development
         details: process.env.NODE_ENV === "development" ? error.toString() : undefined
       },
       { status: 500 }
     );
   }
+}
+
+// ✅ Helper: Check if string is valid UUID
+function isValidUuid(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
 }
