@@ -29,11 +29,14 @@ interface Product {
   images: string[];
   stock: number;
   createdAt: string;
-  // Price range dari material calculation
+  // ✅ NEW: Price range dari material calculation (dari API)
+  priceRange?: { min: number; max: number } | null;
+  // Legacy fields (untuk backward compatibility)
   hasMaterialPrices?: boolean;
   minPrice?: number;
   maxPrice?: number;
   availableMaterialIds?: string[];
+  displayPrice?: number; // ✅ Fallback price jika priceRange null
 }
 
 interface Order {
@@ -86,7 +89,6 @@ export default function AdminDashboard() {
       
       console.log('📊 Fetching dashboard data...');
       
-      // ✅ Single API call ke endpoint dashboard yang sudah kita buat
       const response = await fetch("/api/admin/dashboard");
       
       if (!response.ok) {
@@ -119,7 +121,6 @@ export default function AdminDashboard() {
   // ✅ Helper: Get primary image (filter videos)
   const getPrimaryImage = (images: string[]) => {
     if (!images || images.length === 0) return null;
-    // Prioritize images over videos for thumbnail
     return images.find(img => !img.endsWith('.mp4') && !img.endsWith('.webm')) || images[0];
   };
 
@@ -128,15 +129,36 @@ export default function AdminDashboard() {
     return images?.some(img => img.endsWith('.mp4') || img.endsWith('.webm'));
   };
 
-  // ✅ Helper: Format price display with range support
+  // ✅ UPDATED: Format price display dengan priority: priceRange > displayPrice > base price
   const formatProductPrice = (product: Product) => {
-    if (product.hasMaterialPrices && product.minPrice !== undefined) {
+    // Priority 1: priceRange dari API
+    if (product.priceRange && product.priceRange.min > 0) {
+      if (product.priceRange.max && product.priceRange.max !== product.priceRange.min) {
+        return `${formatCurrency(product.priceRange.min)} - ${formatCurrency(product.priceRange.max)}/m²`;
+      }
+      return `${formatCurrency(product.priceRange.min)}/m²`;
+    }
+    
+    // Priority 2: displayPrice (fallback dari API)
+    if (product.displayPrice && product.displayPrice > 0) {
+      return `${formatCurrency(product.displayPrice)}/m²`;
+    }
+    
+    // Priority 3: legacy minPrice/maxPrice
+    if (product.hasMaterialPrices && product.minPrice !== undefined && product.minPrice > 0) {
       if (product.maxPrice && product.maxPrice !== product.minPrice) {
         return `${formatCurrency(product.minPrice)} - ${formatCurrency(product.maxPrice)}/m²`;
       }
       return `${formatCurrency(product.minPrice)}/m²`;
     }
-    return `${formatCurrency(product.price)}/m²`;
+    
+    // Fallback: base price
+    if (product.price && product.price > 0) {
+      return `${formatCurrency(product.price)}/m²`;
+    }
+    
+    // Last resort
+    return "Contact for pricing";
   };
 
   // ✅ Helper: Get status badge color
@@ -155,18 +177,11 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        {/* Stats Skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="h-32 bg-krearte-gray-100 animate-pulse rounded-lg"
-            />
+            <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-32 bg-krearte-gray-100 animate-pulse rounded-lg" />
           ))}
         </div>
-        {/* Content Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="h-96 bg-krearte-gray-100 animate-pulse rounded-lg" />
           <div className="h-96 bg-krearte-gray-100 animate-pulse rounded-lg" />
@@ -182,12 +197,8 @@ export default function AdminDashboard() {
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
         <h3 className="text-lg font-medium text-krearte-black mb-2">Failed to Load Dashboard</h3>
         <p className="text-krearte-gray-600 mb-6">{error}</p>
-        <button
-          onClick={fetchDashboardData}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-krearte-black text-krearte-white rounded-lg hover:bg-krearte-charcoal transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Retry
+        <button onClick={fetchDashboardData} className="inline-flex items-center gap-2 px-6 py-3 bg-krearte-black text-krearte-white rounded-lg hover:bg-krearte-charcoal transition-colors">
+          <RefreshCw className="w-4 h-4" /> Retry
         </button>
       </div>
     );
@@ -195,34 +206,10 @@ export default function AdminDashboard() {
 
   // ==================== STAT CARDS DATA ====================
   const statCards = [
-    {
-      name: "Total Products",
-      value: stats.totalProducts.toLocaleString(),
-      icon: Package,
-      color: "bg-blue-500",
-      trend: stats.totalProducts > 0 ? `+${stats.totalProducts}` : "0",
-    },
-    {
-      name: "Total Orders",
-      value: stats.totalOrders.toLocaleString(),
-      icon: ShoppingCart,
-      color: "bg-green-500",
-      trend: stats.totalOrders > 0 ? `+${stats.totalOrders}` : "0",
-    },
-    {
-      name: "Total Revenue",
-      value: formatCurrency(stats.totalRevenue),
-      icon: DollarSign,
-      color: "bg-purple-500",
-      trend: stats.totalRevenue > 0 ? "+New" : "0",
-    },
-    {
-      name: "Total Customers",
-      value: stats.totalCustomers.toLocaleString(),
-      icon: Users,
-      color: "bg-orange-500",
-      trend: "+0",
-    },
+    { name: "Total Products", value: stats.totalProducts.toLocaleString(), icon: Package, color: "bg-blue-500", trend: stats.totalProducts > 0 ? `+${stats.totalProducts}` : "0" },
+    { name: "Total Orders", value: stats.totalOrders.toLocaleString(), icon: ShoppingCart, color: "bg-green-500", trend: stats.totalOrders > 0 ? `+${stats.totalOrders}` : "0" },
+    { name: "Total Revenue", value: formatCurrency(stats.totalRevenue), icon: DollarSign, color: "bg-purple-500", trend: stats.totalRevenue > 0 ? "+New" : "0" },
+    { name: "Total Customers", value: stats.totalCustomers.toLocaleString(), icon: Users, color: "bg-orange-500", trend: "+0" },
   ];
 
   // ==================== MAIN RENDER ====================
@@ -233,15 +220,9 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-sans text-3xl font-light mb-2">Dashboard</h1>
-          <p className="text-krearte-gray-600 font-light">
-            Welcome back! Here&apos;s what&apos;s happening with your store today.
-          </p>
+          <p className="text-krearte-gray-600 font-light">Welcome back! Here&apos;s what&apos;s happening with your store today.</p>
         </div>
-        <button
-          onClick={fetchDashboardData}
-          className="p-2 text-krearte-gray-500 hover:text-krearte-black hover:bg-krearte-gray-100 rounded-lg transition-colors"
-          title="Refresh data"
-        >
+        <button onClick={fetchDashboardData} className="p-2 text-krearte-gray-500 hover:text-krearte-black hover:bg-krearte-gray-100 rounded-lg transition-colors" title="Refresh data">
           <RefreshCw className="w-5 h-5" />
         </button>
       </div>
@@ -249,20 +230,13 @@ export default function AdminDashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, index) => (
-          <motion.div
-            key={stat.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-krearte-white rounded-lg p-6 border border-krearte-gray-200"
-          >
+          <motion.div key={stat.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-krearte-white rounded-lg p-6 border border-krearte-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className={`w-12 h-12 ${stat.color} rounded-lg flex items-center justify-center`}>
                 <stat.icon className="w-6 h-6 text-krearte-white" />
               </div>
               <span className="text-sm font-medium text-green-600 flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" />
-                {stat.trend}
+                <TrendingUp className="w-4 h-4" /> {stat.trend}
               </span>
             </div>
             <p className="text-2xl font-normal mb-1">{stat.value}</p>
@@ -278,10 +252,7 @@ export default function AdminDashboard() {
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200">
           <div className="flex items-center justify-between p-6 border-b border-krearte-gray-200">
             <h2 className="font-sans text-lg font-normal">Recent Products</h2>
-            <Link
-              href="/admin/products"
-              className="text-sm text-krearte-black font-medium hover:text-krearte-gray-600 flex items-center gap-1"
-            >
+            <Link href="/admin/products" className="text-sm text-krearte-black font-medium hover:text-krearte-gray-600 flex items-center gap-1">
               View All <ArrowUpRight className="w-4 h-4" />
             </Link>
           </div>
@@ -293,25 +264,14 @@ export default function AdminDashboard() {
                 const productHasVideo = hasVideo(product.images);
                 
                 return (
-                  <Link
-                    key={product.id}
-                    href={`/admin/products/${product.id}/edit`}
-                    className="group flex gap-4 p-4 border border-krearte-gray-200 rounded-lg hover:border-krearte-black hover:bg-krearte-gray-50 transition-colors"
-                  >
+                  <Link key={product.id} href={`/admin/products/${product.id}/edit`} className="group flex gap-4 p-4 border border-krearte-gray-200 rounded-lg hover:border-krearte-black hover:bg-krearte-gray-50 transition-colors">
                     {/* Thumbnail */}
                     <div className="w-20 h-20 bg-krearte-gray-100 rounded-lg overflow-hidden flex-shrink-0 relative">
                       {primaryImage ? (
                         primaryImage.endsWith('.mp4') || primaryImage.endsWith('.webm') ? (
                           <video src={primaryImage} className="w-full h-full object-cover" muted />
                         ) : (
-                          <img
-                            src={primaryImage}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
-                            }}
-                          />
+                          <img src={primaryImage} alt={product.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '/images/placeholder.jpg'; }} />
                         )
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
@@ -330,7 +290,7 @@ export default function AdminDashboard() {
                       <p className="font-medium text-krearte-black truncate">{product.name}</p>
                       <p className="text-sm text-krearte-gray-500 capitalize">{product.category}</p>
                       
-                      {/* Price with range support */}
+                      {/* ✅ Price with priceRange support */}
                       <p className="text-sm font-normal text-krearte-black mt-1">
                         {formatProductPrice(product)}
                       </p>
@@ -358,10 +318,7 @@ export default function AdminDashboard() {
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200">
           <div className="flex items-center justify-between p-6 border-b border-krearte-gray-200">
             <h2 className="font-sans text-lg font-normal">Recent Orders</h2>
-            <Link
-              href="/admin/orders"
-              className="text-sm text-krearte-black font-medium hover:text-krearte-gray-600 flex items-center gap-1"
-            >
+            <Link href="/admin/orders" className="text-sm text-krearte-black font-medium hover:text-krearte-gray-600 flex items-center gap-1">
               View All <ArrowUpRight className="w-4 h-4" />
             </Link>
           </div>
@@ -381,30 +338,18 @@ export default function AdminDashboard() {
                 {stats.recentOrders.length > 0 ? (
                   stats.recentOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-krearte-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-krearte-black">
-                        {order.orderNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-krearte-gray-600">
-                        {order.firstName} {order.lastName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-normal text-krearte-black">
-                        {formatCurrency(order.total)}
-                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-krearte-black">{order.orderNumber}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-krearte-gray-600">{order.firstName} {order.lastName}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-normal text-krearte-black">{formatCurrency(order.total)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>{order.status}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-krearte-gray-600">
-                        {new Date(order.createdAt).toLocaleDateString("id-ID")}
-                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-krearte-gray-600">{new Date(order.createdAt).toLocaleDateString("id-ID")}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-krearte-gray-500">
-                      No orders yet
-                    </td>
+                    <td colSpan={5} className="px-6 py-12 text-center text-krearte-gray-500">No orders yet</td>
                   </tr>
                 )}
               </tbody>
@@ -415,28 +360,19 @@ export default function AdminDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link
-          href="/admin/products/new"
-          className="bg-krearte-black text-krearte-white rounded-lg p-6 hover:bg-krearte-charcoal transition-colors"
-        >
+        <Link href="/admin/products/new" className="bg-krearte-black text-krearte-white rounded-lg p-6 hover:bg-krearte-charcoal transition-colors">
           <Package className="w-8 h-8 mb-3" />
           <h3 className="font-sans text-lg font-normal mb-1">Add Product</h3>
           <p className="text-sm font-light text-krearte-gray-300">Create a new product listing</p>
         </Link>
         
-        <Link
-          href="/admin/orders"
-          className="bg-krearte-white border border-krearte-gray-200 rounded-lg p-6 hover:border-krearte-black transition-colors"
-        >
+        <Link href="/admin/orders" className="bg-krearte-white border border-krearte-gray-200 rounded-lg p-6 hover:border-krearte-black transition-colors">
           <ShoppingCart className="w-8 h-8 mb-3 text-krearte-black" />
           <h3 className="font-sans text-lg font-normal mb-1">Manage Orders</h3>
           <p className="text-sm font-light text-krearte-gray-600">View and process orders</p>
         </Link>
         
-        <Link
-          href="/admin/settings"
-          className="bg-krearte-white border border-krearte-gray-200 rounded-lg p-6 hover:border-krearte-black transition-colors"
-        >
+        <Link href="/admin/settings" className="bg-krearte-white border border-krearte-gray-200 rounded-lg p-6 hover:border-krearte-black transition-colors">
           <Settings className="w-8 h-8 mb-3 text-krearte-black" />
           <h3 className="font-sans text-lg font-normal mb-1">Settings</h3>
           <p className="text-sm font-light text-krearte-gray-600">Configure your store</p>
