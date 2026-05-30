@@ -38,6 +38,8 @@ interface Material {
   name: string;
   category: string;
   width: string | null;
+  // ✅ NEW: Effective width dari database
+  effectiveWidth?: number | null;
   pricePerM2: number;
   designerPricePerM2?: number;
   resellerPricePerM2?: number;
@@ -266,31 +268,44 @@ export default function ProductDetail() {
     };
   };
 
+  // ✅ UPDATED: Gunakan effectiveWidth dari database
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
-    const widthWithOverlap = (widthCm + 6) / 100;
+    // ✅ Ambil effectiveWidth dari database, fallback ke width atau 1.03
+    const effectiveWidth = selectedMaterial.effectiveWidth || 
+                          (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
+    
+    // Print area (area desain sebenarnya)
+    const printWidth = widthCm / 100;
+    const printHeight = heightCm / 100;
+    const printArea = printWidth * printHeight;
+    
+    // Area dengan overlap
+    const widthWithOverlap = (widthCm + 6) / 100; // +3cm tiap sisi
     const heightWithOverlap = (heightCm + 6) / 100;
-    const actualArea = widthWithOverlap * heightWithOverlap;
     
-    const materialWidth = selectedMaterial.width 
-      ? parseFloat(selectedMaterial.width) 
-      : 1.37;
+    // ✅ Hitung panel menggunakan effectiveWidth
+    const panelsNeeded = Math.ceil(widthWithOverlap / effectiveWidth);
     
-    const panelsNeeded = Math.ceil(widthWithOverlap / materialWidth);
-    const totalPanelArea = panelsNeeded * (materialWidth * heightWithOverlap);
-    const wasteArea = totalPanelArea - actualArea;
+    // Total material area
+    const totalPanelArea = panelsNeeded * (effectiveWidth * heightWithOverlap);
+    
+    // Waste
+    const wasteArea = totalPanelArea - printArea;
     
     return {
-      actualArea,
+      printArea,
+      widthWithOverlap,
+      heightWithOverlap,
       panelsNeeded,
       wasteArea,
       totalPanelArea,
-      materialWidth,
+      effectiveWidth, // Untuk display
     };
   };
 
-  // ✅ Calculate total price dengan perhitungan 2.5D yang benar
+  // ✅ UPDATED: Calculate total price dengan effectiveWidth
   const calculateTotalPrice = () => {
     if (!selectedMaterial && product) {
       const areaM2 = (widthCm / 100) * (heightCm / 100);
@@ -298,33 +313,40 @@ export default function ProductDetail() {
     }
     if (!selectedMaterial) return 0;
     
+    // ✅ Ambil effectiveWidth
+    const effectiveWidth = selectedMaterial.effectiveWidth || 
+                          (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
+    
     const widthWithOverlap = (widthCm + 6) / 100;
     const heightWithOverlap = (heightCm + 6) / 100;
-    const actualArea = widthWithOverlap * heightWithOverlap;
     
-    const materialWidth = selectedMaterial.width 
-      ? parseFloat(selectedMaterial.width) 
-      : 1.37;
+    // Print area (untuk perhitungan material & 2.5D)
+    const printArea = (widthCm / 100) * (heightCm / 100);
     
-    const panelsNeeded = Math.ceil(widthWithOverlap / materialWidth);
-    const totalPanelArea = panelsNeeded * (materialWidth * heightWithOverlap);
-    const wasteArea = totalPanelArea - actualArea;
+    // Hitung panel
+    const panelsNeeded = Math.ceil(widthWithOverlap / effectiveWidth);
+    
+    // Total material area
+    const totalPanelArea = panelsNeeded * (effectiveWidth * heightWithOverlap);
+    
+    // Waste
+    const wasteArea = totalPanelArea - printArea;
     
     const { price: materialPrice } = getPriceByRole(selectedMaterial);
     const wastePrice = selectedMaterial.waste || 60000;
 
-    const materialCost = actualArea * materialPrice;
+    const materialCost = printArea * materialPrice;
     const wasteCost = wasteArea * wastePrice;
     
     let totalPrice = materialCost + wasteCost;
     
-    // ✅ Perhitungan Add-Ons yang benar
+    // Perhitungan Add-Ons
     selectedAddOns.forEach(addOnId => {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
-          // ✅ 2.5D Effect: harga per m² × actual area (print area)
-          totalPrice += addOn.price * actualArea;
+          // 2.5D Effect: harga per m² × print area
+          totalPrice += addOn.price * printArea;
         } else {
           // Service: harga fixed
           totalPrice += addOn.price;
@@ -356,6 +378,7 @@ export default function ProductDetail() {
       pricePerM2: product.price,
       waste: 60000,
       width: 'N/A',
+      effectiveWidth: null,
       category: 'fallback',
       samplePriceA3: 50000,
       stock: 999,
@@ -603,7 +626,12 @@ export default function ProductDetail() {
                       <label className="text-sm font-normal text-krearte-black">Select Material</label>
                     </div>
                     {selectedMaterial?.width && (
-                      <span className="text-sm font-light text-krearte-gray-600">Width: {selectedMaterial.width}</span>
+                      <span className="text-sm font-light text-krearte-gray-600">
+                        Width: {selectedMaterial.width}m
+                        {selectedMaterial.effectiveWidth && (
+                          <span className="text-krearte-gray-400"> (print: {selectedMaterial.effectiveWidth}m)</span>
+                        )}
+                      </span>
                     )}
                   </div>
 
@@ -664,7 +692,7 @@ export default function ProductDetail() {
                             selectedAddOns.reduce((total, addOnId) => {
                               const addOn = addOns.find(a => a.id === addOnId);
                               if (!addOn) return total;
-                              return total + (addOn.type === 'effect' && panelInfo ? addOn.price * panelInfo.actualArea : addOn.price);
+                              return total + (addOn.type === 'effect' && panelInfo ? addOn.price * panelInfo.printArea : addOn.price);
                             }, 0)
                           )}
                         </span>
@@ -693,7 +721,7 @@ export default function ProductDetail() {
                             <p className="text-xs font-light text-krearte-gray-500 mb-1">{addOn.description}</p>
                             {addOn.type === 'effect' && panelInfo && (
                               <p className="text-xs text-krearte-gray-400">
-                                = {formatCurrency(addOn.price * panelInfo.actualArea)} for {panelInfo.actualArea.toFixed(2)} m²
+                                = {formatCurrency(addOn.price * panelInfo.printArea)} for {panelInfo.printArea.toFixed(2)} m²
                               </p>
                             )}
                           </div>
@@ -728,11 +756,16 @@ export default function ProductDetail() {
                       
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">With 3cm overlap:</span>
-                        <span className="font-normal text-krearte-black">{widthCm + 6}cm × {heightCm + 6}cm = {panelInfo.actualArea.toFixed(2)} m²</span>
+                        <span className="font-normal text-krearte-black">{widthCm + 6}cm × {heightCm + 6}cm = {panelInfo.widthWithOverlap.toFixed(2)}m × {panelInfo.heightWithOverlap.toFixed(2)}m</span>
                       </div>
                       
                       {selectedMaterial && (
                         <>
+                          <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
+                            <span className="font-light text-krearte-gray-600">Effective width per panel:</span>
+                            <span className="font-normal text-krearte-black">{panelInfo.effectiveWidth.toFixed(2)}m</span>
+                          </div>
+                          
                           <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                             <span className="font-light text-krearte-gray-600">Panels needed:</span>
                             <span className="font-normal text-krearte-black">{panelInfo.panelsNeeded} panel(s)</span>
@@ -740,7 +773,7 @@ export default function ProductDetail() {
                           
                           <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                             <span className="font-light text-krearte-gray-600">Print Area:</span>
-                            <span className="font-normal text-krearte-black">{panelInfo.actualArea.toFixed(2)} m²</span>
+                            <span className="font-normal text-krearte-black">{panelInfo.printArea.toFixed(2)} m²</span>
                           </div>
                           
                           <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
@@ -750,7 +783,7 @@ export default function ProductDetail() {
                           
                           <div className="flex justify-between text-sm mt-2">
                             <span className="font-light text-krearte-gray-600">Material ({getPriceByRole(selectedMaterial).label}):</span>
-                            <span className="font-light text-krearte-black">{formatCurrency(getPriceByRole(selectedMaterial).price)} × {panelInfo.actualArea.toFixed(2)} m²</span>
+                            <span className="font-light text-krearte-black">{formatCurrency(getPriceByRole(selectedMaterial).price)} × {panelInfo.printArea.toFixed(2)} m²</span>
                           </div>
                           
                           <div className="flex justify-between text-sm">
@@ -769,7 +802,7 @@ export default function ProductDetail() {
                             if (!addOn) return null;
                             
                             const addOnTotal = addOn.type === 'effect' && panelInfo 
-                              ? addOn.price * panelInfo.actualArea 
+                              ? addOn.price * panelInfo.printArea 
                               : addOn.price;
                             
                             return (
@@ -778,7 +811,7 @@ export default function ProductDetail() {
                                   {addOn.name}:
                                   {addOn.type === 'effect' && panelInfo && (
                                     <span className="text-xs text-krearte-gray-400 ml-1">
-                                      ({formatCurrency(addOn.price)}/m² × {panelInfo.actualArea.toFixed(2)} m²)
+                                      ({formatCurrency(addOn.price)}/m² × {panelInfo.printArea.toFixed(2)} m²)
                                     </span>
                                   )}
                                 </span>
