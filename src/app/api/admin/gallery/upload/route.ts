@@ -1,14 +1,20 @@
+// src/app/api/admin/gallery/upload/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth"; // ✅ Sesuaikan path auth kamu
 import { prisma } from "@/lib/prisma";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-export const revalidate = 0;
 
 export async function POST(request: Request) {
   try {
+    // 1. ✅ Authentication Check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2. ✅ Parse FormData dari Frontend
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const title = formData.get("title") as string;
@@ -24,37 +30,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Only images allowed" }, { status: 400 });
     }
 
-    // ✅ Convert file to buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // 3. ✅ PROXY: Forward file ke VPS Upload Server
+    // ⚠️ PENTING: Ganti dengan IP Publik atau Domain VPS Hostinger kamu
+    const VPS_UPLOAD_URL = process.env.VPS_UPLOAD_URL || "http://103.xx.xx.xx:4000/upload";
 
-    // ✅ Generate safe filename
-    const ext = file.name.split(".").pop();
-    const safeName = file.name.split(".")[0].replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
-    const filename = `${Date.now()}-${safeName}.${ext}`;
+    const vpsFormData = new FormData();
+    vpsFormData.append("file", file);
 
-    // ✅ Define upload path - use public/gallery folder
-    const uploadDir = join(process.cwd(), "public", "gallery");
-    const filepath = join(uploadDir, filename);
+    const vpsResponse = await fetch(VPS_UPLOAD_URL, {
+      method: "POST",
+      headers: {
+        "folder": "gallery", // ✅ Memberitahu VPS simpan di folder gallery/
+      },
+      body: vpsFormData,
+      // ❌ JANGAN set Content-Type header manual, biar browser handle boundary
+    });
 
-    // ✅ Create folder if not exists (with better error handling)
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (mkdirError: any) {
-      // If mkdir fails, log but continue (folder might already exist)
-      console.warn("⚠️ Folder creation warning:", mkdirError.message);
+    if (!vpsResponse.ok) {
+      const errText = await vpsResponse.text();
+      throw new Error(`VPS rejected upload: ${errText}`);
     }
 
-    // ✅ Write file to disk
-    await writeFile(filepath, buffer);
+    const vpsData = await vpsResponse.json();
 
-    // ✅ Save to database with correct public URL
-    const imageUrl = `/gallery/${filename}`;
-    
+    if (!vpsData.success || !vpsData.url) {
+      throw new Error("Invalid response from VPS upload server");
+    }
+
+    // 4. ✅ Simpan Metadata ke Database Supabase (via Prisma)
     const galleryItem = await prisma.gallery.create({
       data: {
         title: title?.trim() || "Untitled",
-        imageUrl,
+        imageUrl: vpsData.url, // ✅ URL publik dari VPS
         category: category?.trim() || "general",
         description: description?.trim() || null,
         isFeatured: false,
@@ -62,29 +69,23 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log(`✅ Gallery item uploaded: ${imageUrl}`);
+    console.log(`✅ Gallery saved to DB: ${galleryItem.title} | URL: ${vpsData.url}`);
 
-    return NextResponse.json({
-      success: true,
+    return NextResponse.json({ 
+      success: true, 
       galleryItem,
-      message: "Upload successful",
+      message: "Upload successful" 
     });
 
   } catch (error: any) {
-    console.error("❌ UPLOAD ERROR:", error);
+    console.error("❌ Gallery Upload Error:", error);
     
-    // More specific error messages
-    if (error?.code === "EACCES") {
-      return NextResponse.json(
-        { success: false, error: "Permission denied. Check folder permissions." },
-        { status: 500 }
-      );
+    // Handle specific errors
+    if (error?.message?.includes("Unauthorized")) {
+      return NextResponse.json({ success: false, error: "Please login as admin" }, { status: 401 });
     }
-    if (error?.code === "ENOENT") {
-      return NextResponse.json(
-        { success: false, error: "Directory not found. Please create public/gallery folder." },
-        { status: 500 }
-      );
+    if (error?.message?.includes("VPS rejected")) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 502 });
     }
     
     return NextResponse.json(
