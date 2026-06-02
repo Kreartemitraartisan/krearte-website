@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Upload, Trash2, Image as ImageIcon, Plus, Loader2, X, Check } from "lucide-react";
 
 interface GalleryItem {
@@ -11,13 +10,10 @@ interface GalleryItem {
   imageUrl: string;
   category: string;
   description: string | null;
-  isFeatured: boolean;
-  order: number;
   createdAt: string;
 }
 
 export default function AdminGalleryPage() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
@@ -30,8 +26,6 @@ export default function AdminGalleryPage() {
     title: "",
     category: "general",
     description: "",
-    isFeatured: false,
-    order: 0,
   });
 
   // Fetch gallery items
@@ -99,15 +93,12 @@ export default function AdminGalleryPage() {
     uploadFormData.append("title", formData.title.trim());
     uploadFormData.append("category", formData.category);
     uploadFormData.append("description", formData.description.trim());
-    uploadFormData.append("isFeatured", formData.isFeatured.toString());
-    uploadFormData.append("order", formData.order.toString());
 
     try {
-      // ✅ Upload via Vercel API (yang proxy ke VPS)
+      // ✅ Upload via Vercel API (proxy ke VPS)
       const response = await fetch("/api/admin/gallery/upload", {
         method: "POST",
         body: uploadFormData,
-        // ❌ JANGAN set Content-Type header manual, biar browser handle boundary
       });
 
       const result = await response.json();
@@ -121,8 +112,6 @@ export default function AdminGalleryPage() {
           title: "",
           category: "general",
           description: "",
-          isFeatured: false,
-          order: 0,
         });
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
@@ -145,7 +134,7 @@ export default function AdminGalleryPage() {
     if (!confirm("Are you sure you want to delete this gallery item?")) return;
 
     try {
-      const response = await fetch(`/api/admin/gallery/${id}`, {
+      const response = await fetch(`/api/admin/gallery?id=${id}`, {
         method: "DELETE",
       });
 
@@ -196,7 +185,7 @@ export default function AdminGalleryPage() {
         </p>
       </div>
 
-      {/* Upload Form */}
+      {/* Upload Form - SIMPLIFIED (no display order, no featured) */}
       <div className="bg-white rounded-lg p-6 md:p-8 shadow-sm border border-krearte-gray-200">
         <h2 className="text-xl font-light mb-6 flex items-center gap-2">
           <Upload className="w-5 h-5 text-krearte-black" />
@@ -211,7 +200,6 @@ export default function AdminGalleryPage() {
             </label>
             
             {!preview ? (
-              // Drop zone / Upload button
               <div 
                 className="border-2 border-dashed border-krearte-gray-300 rounded-lg p-8 text-center hover:border-krearte-black hover:bg-krearte-gray-50 transition-colors cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
@@ -231,7 +219,6 @@ export default function AdminGalleryPage() {
                 </div>
               </div>
             ) : (
-              // Preview mode
               <div className="relative">
                 <div className="border-2 border-krearte-gray-200 rounded-lg p-4">
                   <div className="flex items-center gap-4">
@@ -245,7 +232,7 @@ export default function AdminGalleryPage() {
                         {selectedFile?.name}
                       </p>
                       <p className="text-sm text-krearte-gray-500">
-                        {(selectedFile?.size || 0 / 1024 / 1024).toFixed(2)} MB
+                        {((selectedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB
                       </p>
                       <p className="text-sm text-green-600 flex items-center gap-1 mt-1">
                         <Check className="w-4 h-4" /> Ready to upload
@@ -313,35 +300,6 @@ export default function AdminGalleryPage() {
             />
           </div>
 
-          {/* Featured & Order */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="isFeatured"
-                checked={formData.isFeatured}
-                onChange={(e) => handleInputChange("isFeatured", e.target.checked)}
-                className="w-4 h-4 accent-krearte-black"
-              />
-              <label htmlFor="isFeatured" className="text-sm font-normal text-krearte-black">
-                Feature this item on homepage
-              </label>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-normal text-krearte-black mb-2">
-                Display Order
-              </label>
-              <input
-                type="number"
-                value={formData.order}
-                onChange={(e) => handleInputChange("order", parseInt(e.target.value) || 0)}
-                className="w-full px-4 py-3 border border-krearte-gray-200 rounded-lg focus:outline-none focus:border-krearte-black transition-colors"
-                min="0"
-              />
-            </div>
-          </div>
-
           {/* Submit Button */}
           <div className="flex justify-end pt-4 border-t border-krearte-gray-200">
             <button
@@ -400,11 +358,6 @@ export default function AdminGalleryPage() {
                       (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
                     }}
                   />
-                  {item.isFeatured && (
-                    <span className="absolute top-3 left-3 px-2 py-1 bg-krearte-black text-white text-xs rounded-full">
-                      Featured
-                    </span>
-                  )}
                 </div>
                 
                 {/* Content */}
@@ -421,13 +374,12 @@ export default function AdminGalleryPage() {
                     </p>
                   )}
                   
-                  <div className="flex items-center justify-between text-xs text-krearte-gray-400">
-                    <span>Order: {item.order}</span>
-                    <span>{new Date(item.createdAt).toLocaleDateString("id-ID")}</span>
+                  <div className="text-xs text-krearte-gray-400 mb-4">
+                    {new Date(item.createdAt).toLocaleDateString("id-ID")}
                   </div>
                   
-                  {/* Actions */}
-                  <div className="mt-4 pt-4 border-t border-krearte-gray-100">
+                  {/* Delete Button */}
+                  <div className="pt-4 border-t border-krearte-gray-100">
                     <button
                       onClick={() => handleDelete(item.id)}
                       className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors w-full justify-center"
