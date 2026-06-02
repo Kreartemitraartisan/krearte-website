@@ -1,9 +1,10 @@
+// src/app/admin/materials/page.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { formatCurrency } from "@/lib/utils";
-import { Edit, Save, Upload, Loader2, Package, X, Image as ImageIcon, Trash2 } from "lucide-react";
+import { Edit, Save, Upload, Loader2, Package, X, Image as ImageIcon } from "lucide-react";
 
 interface Material {
   id: string;
@@ -59,7 +60,7 @@ export default function MaterialsManagementPage() {
     }
   };
 
-  // ✅ Handle File Upload
+  // ✅ Handle File Upload (ke VPS via Vercel API proxy)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -83,15 +84,21 @@ export default function MaterialsManagementPage() {
       const uploadFormData = new FormData();
       uploadFormData.append("file", file);
 
+      // ✅ Upload via Vercel API proxy ke VPS
+      // Header "folder" memberitahu VPS untuk simpan di folder materials/
       const res = await fetch("/api/admin/upload", {
         method: "POST",
         body: uploadFormData,
+        headers: {
+          "folder": "materials", // ✅ Penting: folder tujuan di VPS
+        },
+        // ❌ JANGAN set Content-Type: multipart/form-data manual!
       });
 
       const data = await res.json();
 
       if (data.success) {
-        // Auto-fill URL after upload
+        // ✅ Auto-fill imageUrl di form dengan URL dari VPS
         setFormData(prev => ({ ...prev, imageUrl: data.url }));
         alert("Image uploaded successfully!");
       } else {
@@ -115,7 +122,7 @@ export default function MaterialsManagementPage() {
     setFormData({ ...material });
   };
 
-  // Handle Save
+  // Handle Save (Update material ke database)
   const handleSave = async () => {
     if (!editingId) return;
     
@@ -130,7 +137,11 @@ export default function MaterialsManagementPage() {
       const res = await fetch("/api/admin/materials", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, ...formData }),
+        body: JSON.stringify({ 
+          id: editingId, 
+          ...formData,
+          // ✅ imageUrl sudah termasuk di formData dari hasil upload
+        }),
       });
       
       const data = await res.json();
@@ -162,6 +173,7 @@ export default function MaterialsManagementPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -197,7 +209,7 @@ export default function MaterialsManagementPage() {
               className="bg-white rounded-lg border border-krearte-gray-200 overflow-hidden"
             >
               {editingId === material.id ? (
-                // ✅ EDIT MODE
+                // ✅ EDIT MODE dengan Upload
                 <div className="p-6 space-y-6">
                   {/* Upload Section */}
                   <div>
@@ -212,6 +224,9 @@ export default function MaterialsManagementPage() {
                           src={formData.imageUrl}
                           alt="Material preview"
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
+                          }}
                         />
                         <button
                           onClick={() => handleInputChange("imageUrl", null)}
@@ -230,6 +245,7 @@ export default function MaterialsManagementPage() {
                           accept="image/jpeg,image/png,image/webp"
                           onChange={handleFileUpload}
                           className="hidden"
+                          id="material-image-upload"
                         />
                         <button
                           onClick={() => fileInputRef.current?.click()}
@@ -239,7 +255,7 @@ export default function MaterialsManagementPage() {
                           {uploading ? (
                             <>
                               <Loader2 className="w-5 h-5 animate-spin" />
-                              Uploading...
+                              Uploading to VPS...
                             </>
                           ) : (
                             <>
@@ -249,7 +265,7 @@ export default function MaterialsManagementPage() {
                           )}
                         </button>
                         <p className="text-sm text-krearte-gray-500 mt-3">
-                          PNG, JPG up to 10MB
+                          PNG, JPG, WebP up to 10MB
                         </p>
                       </div>
                     )}
