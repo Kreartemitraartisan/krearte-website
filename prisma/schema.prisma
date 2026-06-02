@@ -71,6 +71,10 @@ model Material {
   stock         Float
   is25DEligible Boolean  @default(false)
   description   String?
+  
+  // ✅ NEW: URL gambar material (dari Supabase Storage upload)
+  imageUrl      String?
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
