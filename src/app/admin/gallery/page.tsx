@@ -43,9 +43,11 @@ export default function AdminGalleryPage() {
         setGallery(result.gallery || []);
       } else {
         console.error("Failed to fetch gallery:", result.error);
+        alert("Failed to load gallery: " + (result.error || "Unknown error"));
       }
     } catch (error) {
       console.error("Error fetching gallery:", error);
+      alert("Failed to load gallery");
     } finally {
       setLoading(false);
     }
@@ -62,9 +64,10 @@ export default function AdminGalleryPage() {
       return;
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File size must be less than 10MB");
+    // ✅ Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      alert(`File too large! Maximum size is 10MB.\n\nYour file: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
       return;
     }
 
@@ -99,6 +102,7 @@ export default function AdminGalleryPage() {
       const response = await fetch("/api/admin/gallery/upload", {
         method: "POST",
         body: uploadFormData,
+        // ❌ JANGAN set Content-Type header manual!
       });
 
       const result = await response.json();
@@ -176,7 +180,7 @@ export default function AdminGalleryPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6 md:p-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-light text-krearte-black mb-2">Gallery Management</h1>
@@ -185,7 +189,7 @@ export default function AdminGalleryPage() {
         </p>
       </div>
 
-      {/* Upload Form - SIMPLIFIED (no display order, no featured) */}
+      {/* Upload Form */}
       <div className="bg-white rounded-lg p-6 md:p-8 shadow-sm border border-krearte-gray-200">
         <h2 className="text-xl font-light mb-6 flex items-center gap-2">
           <Upload className="w-5 h-5 text-krearte-black" />
@@ -227,7 +231,7 @@ export default function AdminGalleryPage() {
                       alt="Preview" 
                       className="w-24 h-24 object-cover rounded-lg border border-krearte-gray-200" 
                     />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-krearte-black truncate">
                         {selectedFile?.name}
                       </p>
@@ -241,7 +245,7 @@ export default function AdminGalleryPage() {
                     <button
                       type="button"
                       onClick={clearPreview}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                       title="Remove image"
                     >
                       <X className="w-5 h-5" />
@@ -349,7 +353,7 @@ export default function AdminGalleryPage() {
                 className="group border border-krearte-gray-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-krearte-black transition-all"
               >
                 {/* Image */}
-                <div className="relative aspect-[4/3] bg-krearte-gray-100">
+                <div className="relative aspect-[4/3] bg-krearte-gray-100 overflow-hidden">
                   <img 
                     src={item.imageUrl} 
                     alt={item.title} 
@@ -375,7 +379,11 @@ export default function AdminGalleryPage() {
                   )}
                   
                   <div className="text-xs text-krearte-gray-400 mb-4">
-                    {new Date(item.createdAt).toLocaleDateString("id-ID")}
+                    {new Date(item.createdAt).toLocaleDateString("id-ID", {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
                   </div>
                   
                   {/* Delete Button */}
