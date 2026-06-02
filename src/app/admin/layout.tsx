@@ -1,4 +1,3 @@
-// app/admin/layout.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,7 +6,8 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { 
   Package, ShoppingCart, Users, BarChart3, Settings,
-  LogOut, Menu, X, Image as ImageIcon, Home
+  LogOut, Menu, X, Image as ImageIcon, Home,
+  Wrench
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -57,6 +57,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navigation = [
     { name: "Dashboard", href: "/admin", icon: BarChart3 },
     { name: "Products", href: "/admin/products", icon: Package },
+    // ✅ NEW: Materials navigation item
+    { name: "Materials", href: "/admin/materials", icon: Wrench },
     { name: "Gallery", href: "/admin/gallery", icon: ImageIcon },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Users", href: "/admin/users", icon: Users },
@@ -77,17 +79,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin" className="font-sans text-xl font-normal">KREARTE ADMIN</Link>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-krearte-gray-400"><X className="w-6 h-6" /></button>
           </div>
+          
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
-                <Link key={item.name} href={item.href} className={`flex items-center gap-3 px-4 py-3 text-sm font-light rounded-lg transition-colors ${isActive ? "bg-krearte-gray-800 text-krearte-white" : "text-krearte-gray-300 hover:bg-krearte-gray-800"}`}>
-                  <Icon className="w-5 h-5" />{item.name}
+                <Link 
+                  key={item.name} 
+                  href={item.href} 
+                  className={`flex items-center gap-3 px-4 py-3 text-sm font-light rounded-lg transition-colors ${
+                    isActive ? "bg-krearte-gray-800 text-krearte-white" : "text-krearte-gray-300 hover:bg-krearte-gray-800"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  {item.name}
                 </Link>
               );
             })}
           </nav>
+          
           <div className="p-4 border-t border-krearte-gray-800">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-krearte-gray-700 rounded-full flex items-center justify-center">
@@ -98,7 +109,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <p className="text-xs text-krearte-gray-400">{session?.user?.email}</p>
               </div>
             </div>
-            <button onClick={() => signOut({ callbackUrl: "/" })} className="flex items-center gap-3 w-full px-4 py-3 text-sm text-krearte-gray-300 hover:bg-krearte-gray-800 rounded-lg">
+            <button 
+              onClick={() => signOut({ callbackUrl: "/" })} 
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-krearte-gray-300 hover:bg-krearte-gray-800 rounded-lg"
+            >
               <LogOut className="w-5 h-5" /> Sign Out
             </button>
           </div>
@@ -109,13 +123,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="lg:ml-64">
         <header className="sticky top-0 z-30 bg-krearte-white border-b border-krearte-gray-200">
           <div className="flex items-center justify-between px-6 py-4">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden"><Menu className="w-6 h-6" /></button>
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden">
+              <Menu className="w-6 h-6" />
+            </button>
             <Link href="/" target="_blank" className="text-sm text-krearte-gray-600 flex items-center gap-2">
               <Home className="w-4 h-4" /> View Website
             </Link>
           </div>
         </header>
-        <main className="p-6">{children}</main>
+        <main className="p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
