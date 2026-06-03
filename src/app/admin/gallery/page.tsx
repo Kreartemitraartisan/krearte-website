@@ -358,9 +358,7 @@ export default function AdminGalleryPage() {
                     src={item.imageUrl} 
                     alt={item.title} 
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/images/placeholder.jpg';
-                    }}
+                    // ✅ FIX: HAPUS onError supaya tidak infinite loop
                   />
                 </div>
                 
