@@ -14,7 +14,7 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   datasources: {
     db: {
       // ✅ Prioritaskan DIRECT_URL untuk hindari pooler
-      url: process.env.DATABASE_URL || process.env.DIRECT_URL,
+      url: process.env.DIRECT_URL || process.env.DATABASE_URL,
     },
   },
 });
