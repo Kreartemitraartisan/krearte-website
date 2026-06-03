@@ -1,3 +1,4 @@
+// src/app/api/admin/gallery/upload/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -24,11 +25,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // 3. ✅ Forward ke VPS Upload Endpoint (sama seperti products)
+    if (!file.type.startsWith("image/")) {
+      return NextResponse.json({ error: "Only images allowed" }, { status: 400 });
+    }
+
+    // 3. ✅ Forward ke VPS Upload Endpoint
+    const VPS_UPLOAD_URL = process.env.VPS_UPLOAD_URL || "http://72.62.120.245/upload";
+    
     const vpsFormData = new FormData();
     vpsFormData.append("file", file);
 
-    const vpsResponse = await fetch(`https://your-vps-domain.com/upload`, {
+    const vpsResponse = await fetch(VPS_UPLOAD_URL, {
       method: "POST",
       headers: {
         "folder": "gallery", // ✅ Folder tujuan di VPS
@@ -59,10 +66,24 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, galleryItem });
+    console.log(`✅ Gallery uploaded: ${galleryItem.title} | URL: ${vpsData.url}`);
+
+    return NextResponse.json({ 
+      success: true, 
+      galleryItem,
+      message: "Upload successful" 
+    });
 
   } catch (error: any) {
     console.error("❌ Gallery Upload Error:", error);
+    
+    if (error?.message?.includes("Unauthorized")) {
+      return NextResponse.json({ success: false, error: "Please login as admin" }, { status: 401 });
+    }
+    if (error?.message?.includes("VPS upload failed")) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 502 });
+    }
+    
     return NextResponse.json(
       { success: false, error: error.message || "Upload failed" },
       { status: 500 }
