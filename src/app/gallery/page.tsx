@@ -1,34 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { X, Maximize2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
-// Sample Gallery Data
-const galleryItems = [
-  { id: 1, category: "Wallcovering", title: "Kyoto Installation", location: "Tokyo, Japan", image: "/images/gallery-1.jpg", span: "md:col-span-2 md:row-span-2" },
-  { id: 2, category: "Designer", title: "Minimal Study", location: "New York, USA", image: "/images/gallery-2.jpg", span: "md:col-span-1" },
-  { id: 3, category: "Custom", title: "Bespoke Pattern", location: "London, UK", image: "/images/gallery-3.jpg", span: "md:col-span-1" },
-  { id: 4, category: "Wallcovering", title: "Abstract Flow", location: "Berlin, Germany", image: "/images/gallery-4.jpg", span: "md:col-span-1" },
-  { id: 5, category: "Designer", title: "Signature Series", location: "Paris, France", image: "/images/gallery-5.jpg", span: "md:col-span-1 md:row-span-2" },
-  { id: 6, category: "Custom", title: "Corporate Office", location: "Singapore", image: "/images/gallery-6.jpg", span: "md:col-span-2" },
-  { id: 7, category: "Wallcovering", title: "Texture Detail", location: "Amsterdam, NL", image: "/images/gallery-7.jpg", span: "md:col-span-1" },
-  { id: 8, category: "Designer", title: "Limited Edition", location: "Milan, Italy", image: "/images/gallery-8.jpg", span: "md:col-span-1" },
-];
-
-const categories = ["All", "Wallcovering", "Designer", "Custom"];
+interface GalleryItem {
+  id: string;
+  title: string;
+  imageUrl: string;
+  category: string;
+  description: string | null;
+  createdAt: string;
+}
 
 export default function GalleryPage() {
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<number | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const categories = ["All", "general", "residential", "commercial", "custom", "installation"];
+
+  // ✅ Fetch data dari database
+  useEffect(() => {
+    fetchGallery();
+  }, []);
+
+  const fetchGallery = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/gallery");
+      const result = await response.json();
+      
+      if (result.success) {
+        setGalleryItems(result.gallery || []);
+      } else {
+        console.error("Failed to fetch gallery:", result.error);
+      }
+    } catch (error) {
+      console.error("Error fetching gallery:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredItems = selectedCategory === "All"
     ? galleryItems
     : galleryItems.filter(item => item.category === selectedCategory);
 
-  const openLightbox = (id: number) => {
+  const openLightbox = (id: string) => {
     setSelectedImage(id);
     setLightboxOpen(true);
   };
@@ -40,12 +62,20 @@ export default function GalleryPage() {
 
   const navigateLightbox = (direction: "prev" | "next") => {
     if (selectedImage === null) return;
-    const currentIndex = galleryItems.findIndex(item => item.id === selectedImage);
+    const currentIndex = filteredItems.findIndex(item => item.id === selectedImage);
     const newIndex = direction === "prev"
-      ? (currentIndex - 1 + galleryItems.length) % galleryItems.length
-      : (currentIndex + 1) % galleryItems.length;
-    setSelectedImage(galleryItems[newIndex].id);
+      ? (currentIndex - 1 + filteredItems.length) % filteredItems.length
+      : (currentIndex + 1) % filteredItems.length;
+    setSelectedImage(filteredItems[newIndex].id);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-krearte-black" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-krearte-cream">
@@ -81,7 +111,7 @@ export default function GalleryPage() {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`text-sm font-light whitespace-nowrap transition-colors ${
+                className={`text-sm font-light whitespace-nowrap transition-colors capitalize ${
                   selectedCategory === category
                     ? "text-krearte-black font-normal"
                     : "text-krearte-gray-500 hover:text-krearte-black"
@@ -97,50 +127,62 @@ export default function GalleryPage() {
       {/* ==================== GALLERY GRID ==================== */}
       <section className="py-16 md:py-24">
         <div className="container mx-auto px-6 md:px-12">
-          <motion.div
-            layout
-            className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]"
-          >
-            <AnimatePresence>
-              {filteredItems.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.5, delay: index * 0.05 }}
-                  className={`relative group overflow-hidden bg-krearte-gray-100 cursor-pointer ${item.span}`}
-                  onClick={() => openLightbox(item.id)}
-                >
-                  {/* Image Placeholder */}
-                  <div className="w-full h-full flex items-center justify-center text-krearte-gray-400 group-hover:scale-105 transition-transform duration-700">
-                    <span className="text-sm font-light">{item.title}</span>
-                  </div>
-                  
-                  {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-krearte-black/0 group-hover:bg-krearte-black/40 transition-colors duration-500 flex flex-col justify-end p-6">
-                    <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-                      <p className="text-krearte-white text-xs font-medium tracking-widest uppercase mb-2">
-                        {item.category}
-                      </p>
-                      <h3 className="text-krearte-white text-lg font-light mb-1">
-                        {item.title}
-                      </h3>
-                      <p className="text-krearte-gray-300 text-sm font-light">
-                        {item.location}
-                      </p>
+          {filteredItems.length === 0 ? (
+            <div className="text-center py-24">
+              <p className="text-krearte-gray-500 text-lg font-light">
+                No gallery items found
+              </p>
+            </div>
+          ) : (
+            <motion.div
+              layout
+              className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]"
+            >
+              <AnimatePresence>
+                {filteredItems.map((item, index) => (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.5, delay: index * 0.05 }}
+                    className={`relative group overflow-hidden bg-krearte-gray-100 cursor-pointer ${
+                      index % 5 === 0 ? "md:col-span-2 md:row-span-2" : ""
+                    }`}
+                    onClick={() => openLightbox(item.id)}
+                  >
+                    {/* ✅ Image dari database */}
+                    <img
+                      src={item.imageUrl}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-krearte-black/0 group-hover:bg-krearte-black/40 transition-colors duration-500 flex flex-col justify-end p-6">
+                      <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <p className="text-krearte-white text-xs font-medium tracking-widest uppercase mb-2">
+                          {item.category}
+                        </p>
+                        <h3 className="text-krearte-white text-lg font-light mb-1">
+                          {item.title}
+                        </h3>
+                        {item.description && (
+                          <p className="text-krearte-gray-300 text-sm font-light line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-
-                  {/* View Icon */}
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Maximize2 className="w-5 h-5 text-krearte-white" />
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          )}
         </div>
       </section>
 
@@ -186,26 +228,28 @@ export default function GalleryPage() {
               onClick={(e) => e.stopPropagation()}
             >
               {(() => {
-                const item = galleryItems.find(i => i.id === selectedImage);
+                const item = filteredItems.find(i => i.id === selectedImage);
                 return item ? (
-                  <div className="bg-krearte-gray-800 aspect-[4/3] flex items-center justify-center text-krearte-gray-400">
-                    <span className="text-sm font-light">{item.title}</span>
-                  </div>
-                ) : null;
-              })()}
-              
-              {/* Image Info */}
-              {(() => {
-                const item = galleryItems.find(i => i.id === selectedImage);
-                return item ? (
-                  <div className="mt-6 text-center">
-                    <h3 className="text-krearte-white text-2xl font-light mb-2">
-                      {item.title}
-                    </h3>
-                    <p className="text-krearte-gray-400 text-sm font-light">
-                      {item.location}
-                    </p>
-                  </div>
+                  <>
+                    <img
+                      src={item.imageUrl}
+                      alt={item.title}
+                      className="w-full h-auto max-h-[70vh] object-contain"
+                    />
+                    <div className="mt-6 text-center">
+                      <h3 className="text-krearte-white text-2xl font-light mb-2">
+                        {item.title}
+                      </h3>
+                      <p className="text-krearte-gray-400 text-sm font-light capitalize">
+                        {item.category}
+                      </p>
+                      {item.description && (
+                        <p className="text-krearte-gray-400 text-sm font-light mt-2">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                  </>
                 ) : null;
               })()}
             </motion.div>
