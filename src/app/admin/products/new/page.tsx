@@ -43,8 +43,8 @@ export default function NewProductPage() {
     name: "",
     slug: "",
     description: "",
-    collectionType: "wallcovering", // wallcovering atau designer
-    category_slug: "", // chinoiserie, zen, floral, animals, dll (untuk URL filter)
+    collectionType: "wallcovering",
+    category_slug: "",
     is25DEligible: false,
     stock: 0,
     availableMaterialIds: [] as string[],
@@ -53,7 +53,6 @@ export default function NewProductPage() {
 
   const [images, setImages] = useState<string[]>([]);
 
-  // ✅ Fetch Materials & Categories on mount
   useEffect(() => {
     async function fetchData() {
       try {
@@ -90,7 +89,6 @@ export default function NewProductPage() {
     fetchData();
   }, []);
 
-  // ✅ Helper functions untuk memisahkan tipe material
   const isPhysicalMaterial = (m: Material) => {
     const cat = m.category?.toLowerCase() || '';
     return !cat.includes('jasa') && 
@@ -103,7 +101,6 @@ export default function NewProductPage() {
 
   const isServiceOrAddon = (m: Material) => !isPhysicalMaterial(m);
 
-  // ✅ Filter & group materials untuk display
   const physicalMaterials = materials.filter(isPhysicalMaterial);
   const services = materials.filter(isServiceOrAddon);
 
@@ -133,7 +130,6 @@ export default function NewProductPage() {
     }
   };
 
-  // ✅ FIXED: Upload ke VPS
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -154,7 +150,6 @@ export default function NewProductPage() {
           throw new Error(`File terlalu besar. Maksimal ${isVideo ? "100MB" : "20MB"}`);
         }
 
-        // Validasi MIME type
         if (isVideo) {
           const allowed = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
           if (!allowed.includes(file.type)) throw new Error("Format video tidak didukung");
@@ -254,12 +249,12 @@ export default function NewProductPage() {
         name: formData.name.trim(),
         slug: formData.slug.trim(),
         description: formData.description?.trim() || "",
-        category: formData.collectionType === 'wallcovering' ? 'wallcovering' : 'designer', // Fallback
-        category_slug: formData.category_slug, // ✅ PENTING: chinoiserie, zen, floral, dll
+        category: formData.collectionType === 'wallcovering' ? 'wallcovering' : 'designer',
+        category_slug: formData.category_slug,
         collectionType: formData.collectionType || "wallcovering",
         is25DEligible: Boolean(formData.is25DEligible),
         stock: Number(formData.stock) || 0,
-        price: 0, // Base price (akan dihitung dari materials)
+        price: 0,
         images: imagePayload,
         availableMaterialIds: formData.availableMaterialIds || [],
         recommendedMaterialIds: formData.recommendedMaterialIds || [],
@@ -294,7 +289,6 @@ export default function NewProductPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/admin/products" className="p-2 text-krearte-gray-600 hover:text-krearte-black hover:bg-krearte-gray-100 rounded transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -313,7 +307,6 @@ export default function NewProductPage() {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         
-        {/* Basic Info */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Basic Information</h2>
           
@@ -345,7 +338,6 @@ export default function NewProductPage() {
               <p className="text-xs text-krearte-gray-500 mt-1">Used in URL: /product/{formData.slug || "your-slug"}</p>
             </div>
 
-            {/* ✅ Collection Type - Wallcovering atau Designer */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">Collection Type *</label>
               <select
@@ -360,7 +352,6 @@ export default function NewProductPage() {
               </select>
             </div>
 
-            {/* ✅ Category Slug - Untuk Filtering URL */}
             <div>
               <label className="block text-sm font-normal text-krearte-black mb-2">Category Slug (Filter) *</label>
               <select
@@ -389,10 +380,11 @@ export default function NewProductPage() {
                   </>
                 ) : (
                   <>
-                    <option value="metallic">Metallic</option>
-                    <option value="textured">Textured</option>
-                    <option value="botanical">Botanical</option>
-                    <option value="exclusive">Exclusive</option>
+                    {/* ✅ UPDATED: Ganti ke nama designer Krearte */}
+                    <option value="krearte-botanical">Krearte Botanical</option>
+                    <option value="krearte-metallic">Krearte Metallic</option>
+                    <option value="krearte-textured">Krearte Textured</option>
+                    <option value="krearte-exclusive">Krearte Exclusive</option>
                   </>
                 )}
               </select>
@@ -412,6 +404,7 @@ export default function NewProductPage() {
               />
             </div>
 
+            {/* ✅ UPDATED: Hapus disabled dari checkbox is25DEligible */}
             <div className="flex items-center">
               <input
                 type="checkbox"
@@ -420,13 +413,9 @@ export default function NewProductPage() {
                 checked={formData.is25DEligible}
                 onChange={handleInputChange}
                 className="w-4 h-4 accent-krearte-black mr-2"
-                disabled={formData.collectionType !== "designer"}
               />
               <label htmlFor="is25DEligible" className="text-sm font-normal text-krearte-black">
                 2.5D Print Effect Eligible
-                {formData.collectionType !== "designer" && (
-                  <span className="text-krearte-gray-400 ml-1">(Designer Collection only)</span>
-                )}
               </label>
             </div>
           </div>
@@ -444,7 +433,6 @@ export default function NewProductPage() {
           </div>
         </div>
 
-        {/* Product Media */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-6">Product Media</h2>
           
@@ -497,7 +485,6 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Materials Section */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2">Available Materials</h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">Pilih material fisik yang tersedia untuk product ini.</p>
@@ -525,7 +512,6 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Recommended Materials */}
         {formData.availableMaterialIds.length > 0 && (
           <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
             <h2 className="font-sans text-lg font-normal mb-2">Recommended Materials (Optional)</h2>
@@ -548,7 +534,6 @@ export default function NewProductPage() {
           </div>
         )}
 
-        {/* Services / Add-Ons */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6 mt-6">
           <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">Available Services / Add-Ons <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{services.length}</span></h2>
           <p className="text-sm font-light text-krearte-gray-600 mb-6">Pilih jasa/add-on yang tersedia untuk product ini (opsional).</p>
@@ -579,7 +564,6 @@ export default function NewProductPage() {
           )}
         </div>
 
-        {/* Submit Button */}
         <div className="flex items-center justify-end gap-4 pt-4 border-t border-krearte-gray-200">
           <Link href="/admin/products" className="px-6 py-3 text-krearte-black font-medium hover:text-krearte-gray-600">Cancel</Link>
           <button type="submit" disabled={loading || uploading || loadingMaterials} className={`px-8 py-3 rounded-full text-sm font-medium transition-colors ${loading || uploading || loadingMaterials ? "bg-krearte-gray-300 cursor-not-allowed" : "bg-krearte-black text-krearte-white hover:bg-krearte-charcoal"}`}>

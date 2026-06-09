@@ -23,10 +23,19 @@ interface Product {
   images: string[] | null;
   sizes: ProductSize[];
   collectionType?: string;
+  category_slug?: string;
   availableMaterialIds?: string[];
   priceRange?: { min: number; max: number };
   is25DEligible?: boolean;
 }
+
+// ✅ UPDATED: Define designer category slugs
+const DESIGNER_CATEGORY_SLUGS = [
+  'krearte-botanical',
+  'krearte-metallic',
+  'krearte-textured',
+  'krearte-exclusive'
+];
 
 export default function DesignerCollectionsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,13 +50,13 @@ export default function DesignerCollectionsPage() {
         const result = await response.json();
         
         if (result.success) {
-          // ✅ Filter: collectionType === 'designer'
+          // ✅ UPDATED: Filter by category_slug (bukan collectionType)
           const designerProducts = (result.products || []).filter((p: Product) => {
-            return p.collectionType?.toLowerCase() === 'designer';
+            return DESIGNER_CATEGORY_SLUGS.includes(p.category_slug || '');
           });
           
           setProducts(designerProducts);
-          console.log(`✅ Loaded ${designerProducts.length} designer products`);
+          console.log(`✅ Loaded ${designerProducts.length} designer products from slugs:`, DESIGNER_CATEGORY_SLUGS);
         }
       } catch (error) {
         console.error("❌ Error fetching designer products:", error);
@@ -155,7 +164,8 @@ export default function DesignerCollectionsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredProducts.map((product) => {
               const media = getPrimaryMedia(product.images);
-              const isPremium = product.price >= 500000 || (product.priceRange?.max || 0) >= 500000;
+              // ✅ UPDATED: Badge muncul kalau is25DEligible (tidak peduli kategori)
+              const isPremium = product.is25DEligible || product.price >= 500000 || (product.priceRange?.max || 0) >= 500000;
               
               return (
                 <div
