@@ -50,7 +50,7 @@ export default function EditProductPage() {
     name: "",
     slug: "",
     collectionType: "wallcovering",
-    category_slug: "", // chinoiserie, zen, floral, dll (untuk URL filter)
+    category_slug: "",
     is25DEligible: false,
     price: 0,
     description: "",
@@ -60,7 +60,6 @@ export default function EditProductPage() {
     recommendedMaterialIds: [] as string[],
   });
 
-  // ✅ Helper: Filter physical materials (exclude services/add-ons)
   const isPhysicalMaterial = (m: Material) => {
     const cat = m.category?.toLowerCase() || '';
     return !cat.includes('jasa') && 
@@ -73,7 +72,6 @@ export default function EditProductPage() {
 
   const isServiceOrAddon = (m: Material) => !isPhysicalMaterial(m);
 
-  // ✅ Fetch Product & Materials on mount
   useEffect(() => {
     async function fetchData() {
       try {
@@ -89,7 +87,6 @@ export default function EditProductPage() {
 
         console.log('🔎 Product API response:', productData);
 
-        // Handle berbagai kemungkinan struktur response
         const product = productData?.product || productData?.data || productData;
         
         if (!product || !product.id) {
@@ -98,12 +95,11 @@ export default function EditProductPage() {
           return;
         }
 
-        // ✅ Set formData dengan data yang benar
         setFormData({
           name: product.name || "",
           slug: product.slug || "",
           collectionType: product.collectionType || "wallcovering",
-          category_slug: product.category_slug || "", // ✅ PENTING: load category_slug dari DB
+          category_slug: product.category_slug || "",
           is25DEligible: product.is25DEligible || false,
           price: typeof product.price === 'number' ? product.price : 0,
           description: product.description || "",
@@ -134,7 +130,6 @@ export default function EditProductPage() {
     }
   }, [productId]);
 
-  // ✅ FIXED: Handle Media Upload - Upload ke VPS
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "image" | "video") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -147,7 +142,6 @@ export default function EditProductPage() {
         
         console.log(`📁 Uploading ${type}:`, file.name);
 
-        // ✅ Validasi ukuran file
         const isVideo = type === "video";
         const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
         
@@ -155,7 +149,6 @@ export default function EditProductPage() {
           throw new Error(`File terlalu besar. Maksimal ${isVideo ? "50MB" : "10MB"}`);
         }
 
-        // ✅ Validasi MIME type
         if (isVideo) {
           const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'];
           if (!allowedVideoTypes.includes(file.type)) {
@@ -168,14 +161,12 @@ export default function EditProductPage() {
           }
         }
 
-        // ✅ Build FormData
         const formDataUpload = new FormData();
         formDataUpload.append('file', file);
         formDataUpload.append('type', type);
 
         console.log('📤 Sending to VPS upload server...');
 
-        // ✅ Upload ke VPS
         const response = await fetch('https://assets.krearte.id/api/upload', {
           method: 'POST',
           headers: {
@@ -198,7 +189,6 @@ export default function EditProductPage() {
           throw new Error('Invalid response from server');
         }
 
-        // ✅ Tambahkan URL ke formData
         setFormData(prev => ({
           ...prev,
           images: [...prev.images, result.url]
@@ -209,7 +199,7 @@ export default function EditProductPage() {
       alert(`❌ ${error.message || "Upload failed!"}`);
     } finally {
       setUploading(false);
-      e.target.value = ""; // Reset input
+      e.target.value = "";
     }
   };
 
@@ -277,13 +267,14 @@ export default function EditProductPage() {
     }
   };
 
+  // ✅ UPDATED: Hapus logic reset is25DEligible
   const handleCollectionTypeChange = (newType: "wallcovering" | "designer") => {
     setFormData(prev => ({
       ...prev,
       collectionType: newType,
-      // Reset category_slug jika collectionType berubah
-      category_slug: newType !== prev.collectionType ? "" : prev.category_slug,
-      is25DEligible: newType === "designer" ? prev.is25DEligible : false,
+      // ✅ HAPUS: Reset category_slug dan is25DEligible
+      // category_slug: newType !== prev.collectionType ? "" : prev.category_slug,
+      // is25DEligible: newType === "designer" ? prev.is25DEligible : false,
     }));
   };
 
@@ -294,7 +285,6 @@ export default function EditProductPage() {
     try {
       console.log('📝 Form data sebelum submit:', formData);
       
-      // ✅ Validasi category_slug wajib diisi
       if (!formData.category_slug) {
         throw new Error("Category Slug (untuk filtering) harus dipilih");
       }
@@ -332,7 +322,6 @@ export default function EditProductPage() {
     }
   };
 
-  // ✅ Filter materials untuk display
   const physicalMaterials = materials.filter(isPhysicalMaterial);
   const services = materials.filter(isServiceOrAddon);
 
@@ -343,7 +332,6 @@ export default function EditProductPage() {
     return acc;
   }, {} as Record<string, Material[]>);
 
-  // ✅ Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -354,7 +342,6 @@ export default function EditProductPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-8">
         <Link
           href="/admin/products"
@@ -369,7 +356,6 @@ export default function EditProductPage() {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         
-        {/* Basic Information */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Basic Information</h2>
 
@@ -402,7 +388,6 @@ export default function EditProductPage() {
               </p>
             </div>
 
-            {/* ✅ Collection Type - Wallcovering atau Designer */}
             <div>
               <label className="block text-sm font-normal mb-2">
                 Collection Type
@@ -418,7 +403,6 @@ export default function EditProductPage() {
               </select>
             </div>
 
-            {/* ✅ Category Slug - Untuk Filtering URL (chinoiserie, zen, floral, dll) */}
             <div>
               <label className="block text-sm font-normal mb-2">
                 Category Slug (untuk filtering) *
@@ -449,10 +433,11 @@ export default function EditProductPage() {
                   </>
                 ) : (
                   <>
-                    <option value="metallic">Metallic</option>
-                    <option value="textured">Textured</option>
-                    <option value="botanical">Botanical</option>
-                    <option value="exclusive">Exclusive</option>
+                    {/* ✅ UPDATED: Ganti ke nama designer Krearte */}
+                    <option value="krearte-botanical">Krearte Botanical</option>
+                    <option value="krearte-metallic">Krearte Metallic</option>
+                    <option value="krearte-textured">Krearte Textured</option>
+                    <option value="krearte-exclusive">Krearte Exclusive</option>
                   </>
                 )}
               </select>
@@ -500,7 +485,6 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        {/* Collection Type Section (Buttons) */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Quick Collection Type</h2>
           
@@ -543,26 +527,24 @@ export default function EditProductPage() {
             </button>
           </div>
 
-          {formData.collectionType === "designer" && (
-            <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  name="is25DEligible"
-                  id="is25DEligible"
-                  checked={formData.is25DEligible}
-                  onChange={handleInputChange}
-                  className="w-4 h-4 accent-krearte-black mt-1"
-                />
-                <label htmlFor="is25DEligible" className="text-sm font-medium text-krearte-black cursor-pointer">
-                  2.5D Print Effect Eligible
-                </label>
-              </div>
+          {/* ✅ UPDATED: Checkbox is25DEligible muncul untuk SEMUA kategori */}
+          <div className="mt-6 p-4 bg-krearte-gray-50 rounded-lg border border-krearte-gray-200">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                name="is25DEligible"
+                id="is25DEligible"
+                checked={formData.is25DEligible}
+                onChange={handleInputChange}
+                className="w-4 h-4 accent-krearte-black mt-1"
+              />
+              <label htmlFor="is25DEligible" className="text-sm font-medium text-krearte-black cursor-pointer">
+                2.5D Print Effect Eligible
+              </label>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Product Media Section */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Product Media</h2>
           
@@ -664,11 +646,9 @@ export default function EditProductPage() {
           )}
         </div>
 
-        {/* Materials Section - PHYSICAL ONLY */}
         <div className="bg-white rounded-lg p-8 shadow-sm border border-krearte-gray-200">
           <h2 className="text-xl font-light mb-6">Materials</h2>
 
-          {/* Available Materials */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-krearte-black">Available Materials</h3>
             
@@ -715,7 +695,6 @@ export default function EditProductPage() {
             )}
           </div>
 
-          {/* Recommended Materials */}
           <div className="mt-8">
             <h3 className="text-sm font-medium text-krearte-black mb-3">
               Recommended Materials (Optional)
@@ -755,7 +734,6 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        {/* Services / Add-Ons Section */}
         <div className="bg-krearte-white rounded-lg border border-krearte-gray-200 p-6">
           <h2 className="font-sans text-lg font-normal mb-2 flex items-center gap-2">
             Available Services / Add-Ons
@@ -825,7 +803,6 @@ export default function EditProductPage() {
           )}
         </div>
 
-        {/* Submit Button */}
         <div className="flex items-center justify-end gap-4">
           <Link
             href="/admin/products"
