@@ -8,97 +8,195 @@ import { formatCurrency } from "@/lib/utils";
 export default function MaterialsPage() {
   const materials = [
     {
-      category: "PVC Wallcoverings",
+      category: "Wallpaper Standard (PVC Coated)",
       description: "Our signature collection. Durable, versatile, and available in 9 unique textures. Perfect for high-traffic areas while maintaining elegance.",
       icon: Layers,
       products: [
         {
-          name: "Standard PVC",
-          texture: "Smooth / Industrial",
+          name: "PVC Wallcoverings - Smooth Sand",
+          code: "Krearte-BST 8626-7",
+          texture: "Smooth",
+          width: "1.06m (Print: 1.04m)",
           price: 345000,
-          // 🖼️ GANTI URL INI dengan path gambar close-up VPS/Supabase kamu nanti
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Standard+PVC+Closeup", 
-          description: "The foundation of Krearte collection. Clean, minimal, and endlessly adaptable.",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Smooth+Sand+PVC",
+          description: "Clean, minimal, and endlessly adaptable. The foundation of Krearte collection.",
           bestFor: "Living rooms, bedrooms, offices",
         },
         {
-          name: "Self Adhesive",
+          name: "PVC Wallcoverings - Industrial",
+          code: "Krearte-BST 8622-1",
+          texture: "Industrial",
+          width: "1.06m (Print: 1.04m)",
+          price: 345000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Industrial+PVC",
+          description: "Raw, urban aesthetic with durable PVC coating.",
+          bestFor: "Commercial spaces, lofts, modern interiors",
+        },
+        {
+          name: "Self Adhesive - Art Fabric",
+          code: "DX340A-E2",
           texture: "Fabric Back",
+          width: "1.52m (Print: 1.5m)",
           price: 335000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Self+Adhesive+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Self+Adhesive+Fabric",
           description: "DIY-friendly without compromising quality. Peel, stick, transform.",
           bestFor: "Quick renovations, rental spaces",
-        },
-        {
-          name: "Non-Woven",
-          texture: "White / Creamy Raw",
-          price: 450000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Non-Woven+Closeup",
-          description: "Breathable material that's easy to install and remove. Eco-conscious choice.",
-          bestFor: "Eco-friendly projects, temporary installations",
-        },
-        {
-          name: "Fabric Back",
-          texture: "Cross Hatch / Fine Sand",
-          price: 385000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Fabric+Back+Closeup",
-          description: "The perfect balance between durability and sophistication.",
-          bestFor: "Commercial spaces, hospitality",
         },
       ],
     },
     {
-      category: "Metallic Collection",
+      category: "Special Effect Wallpaper (Metallic)",
       description: "Where light meets texture. Our metallic finishes catch and reflect light, creating dynamic spaces that change throughout the day.",
       icon: Sparkles,
       products: [
         {
-          name: "Straw Raw Metallic",
-          texture: "Gold / Flex",
+          name: "Straw Raw Texture Metallic",
+          code: "DE030K",
+          texture: "Gold",
+          width: "1.07m (Print: 1.05m)",
           price: 400000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic",
           description: "Subtle shimmer with organic texture. Luxury that doesn't shout.",
           bestFor: "Feature walls, dining rooms",
         },
         {
-          name: "Abstract Embossing",
+          name: "Straw Raw Texture Metallic FLX",
+          code: "DE030K",
+          texture: "Flex",
+          width: "1.07m (Print: 1.05m)",
+          price: 450000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic+FLX",
+          description: "Enhanced flexibility with metallic finish.",
+          bestFor: "Curved surfaces, architectural features",
+        },
+        {
+          name: "Abstract Embossing Texture-Metallic",
+          code: "WP137-Silver 01",
           texture: "Silver Metallic",
+          width: "1.37m (Print: 1.35m)",
           price: 750000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Abstract+Embossing+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Abstract+Embossing",
           description: "Bold patterns with reflective depth. Art for your walls.",
           bestFor: "Statement walls, galleries, boutiques",
         },
         {
-          name: "Japanese Silk",
-          texture: "Metallic Silver",
+          name: "Silver/Gold Metallic",
+          code: "PGS/PSSS 01",
+          texture: "Metallic",
+          width: "1.07m (Print: 1.05m)",
+          price: 500000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Silver+Gold+Metallic",
+          description: "Premium metallic finish. Note: Non-join installation.",
+          bestFor: "Luxury residences, feature walls",
+          note: "⚠️ NON JOIN INSTALLATION",
+        },
+        {
+          name: "Metallic Silver Japanese Silk",
+          code: "XQ-4097",
+          texture: "Metallic Silk",
+          width: "1.37m (Print: 1.35m)",
           price: 860000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Japanese+Silk+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Japanese+Silk",
           description: "Our premium offering. Inspired by traditional Japanese craftsmanship.",
           bestFor: "Luxury residences, high-end hospitality",
+        },
+        {
+          name: "White or Creamy Raw Texture",
+          code: "XQ-4011/XQ-4030",
+          texture: "Non-Woven",
+          width: "1.37m (Print: 1.35m)",
+          price: 450000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=White+Creamy+Raw",
+          description: "Breathable material that's easy to install and remove.",
+          bestFor: "Eco-friendly projects, temporary installations",
+        },
+        {
+          name: "Art Texture",
+          code: "YM-0937",
+          texture: "Raw Texture",
+          width: "1.37m (Print: 1.35m)",
+          price: 400000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Art+Texture",
+          description: "Artistic texture with natural appeal.",
+          bestFor: "Creative spaces, studios",
         },
       ],
     },
     {
-      category: "Special Effects",
+      category: "Non-Woven & Fabric Back",
+      description: "Breathable, eco-conscious materials with superior durability. Perfect for those who value sustainability without compromising on style.",
+      icon: Shield,
+      products: [
+        {
+          name: "Linen (While Stock Last!)",
+          code: "N/A",
+          texture: "Linen",
+          width: "1.2/1.38/1.59/2.78m",
+          price: 375000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Linen+Non+Woven",
+          description: "Natural linen texture with eco-friendly non-woven backing.",
+          bestFor: "Eco-conscious projects, residential",
+          note: "⚠️ Limited stock available",
+        },
+        {
+          name: "Plain Smooth (While Stock Last!)",
+          code: "N3001",
+          texture: "Smooth",
+          width: "1.26m (Print: 1.25m)",
+          price: 300000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Plain+Smooth",
+          description: "Clean, minimalist finish. Great base for any space.",
+          bestFor: "Minimalist designs, offices",
+          note: "⚠️ Limited stock available",
+        },
+        {
+          name: "Cross Hatch Linen",
+          code: "M69",
+          texture: "Cross Hatch",
+          width: "1.4m (Print: 1.38m)",
+          price: 385000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Cross+Hatch+Linen",
+          description: "The perfect balance between durability and sophistication.",
+          bestFor: "Commercial spaces, hospitality",
+        },
+        {
+          name: "Fine Sand Texture",
+          code: "M70",
+          texture: "Fine Sand",
+          width: "1.4m (Print: 1.38m)",
+          price: 385000,
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Fine+Sand+Texture",
+          description: "Subtle sand texture with fabric backing.",
+          bestFor: "Hotels, restaurants, offices",
+        },
+      ],
+    },
+    {
+      category: "Special Services",
       description: "For the extraordinary. These finishes transform wallcoverings into immersive experiences.",
       icon: Sun,
       products: [
         {
-          name: "2.5D Print",
-          texture: "Raised Print Effect",
+          name: "2.5D Print Effect",
+          code: "Add-On",
+          texture: "Raised Print",
+          width: "N/A",
           price: 500000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=2.5D+Print+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=2.5D+Print+Effect",
           description: "Add-on service. Your chosen pattern with tactile depth you can feel.",
           bestFor: "Art walls, branded spaces, installations",
           note: "Add-on: +Rp 500.000/m² from base material price",
         },
         {
-          name: "Custom Print",
+          name: "Custom Print Service",
+          code: "Custom",
           texture: "Your Design",
+          width: "Variable",
           price: 200000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Custom+Print+Closeup",
+          image: "https://placehold.co/800x600/e8e6e1/333333?text=Custom+Print",
           description: "Bring your vision to life. Any pattern, any color, any size.",
           bestFor: "Branded spaces, personal art, unique projects",
+          note: "Add-on: +Rp 200.000/m² from base material price",
         },
       ],
     },
@@ -215,6 +313,20 @@ export default function MaterialsPage() {
                         <h3 className="font-sans text-xl font-normal mb-3 text-krearte-black group-hover:underline decoration-krearte-gray-300 underline-offset-4">
                           {product.name}
                         </h3>
+
+                        {/* Product Code */}
+                        {product.code && product.code !== "N/A" && (
+                          <p className="text-xs font-medium text-krearte-gray-500 mb-2">
+                            Code: {product.code}
+                          </p>
+                        )}
+
+                        {/* Width Info */}
+                        {product.width && (
+                          <p className="text-xs font-medium text-krearte-gray-500 mb-3">
+                            Width: {product.width}
+                          </p>
+                        )}
 
                         {/* Description */}
                         <p className="text-sm font-light text-krearte-gray-600 mb-4 leading-relaxed">
