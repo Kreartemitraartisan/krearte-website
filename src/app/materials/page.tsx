@@ -31,7 +31,27 @@ export default function MaterialsPage() {
         const result = await response.json();
         
         if (result.success) {
-          setMaterials(result.materials || []);
+          // ✅ FILTER: Hanya material fisik, exclude services/add-ons
+          const physicalMaterials = (result.materials || []).filter((material: Material) => {
+            const category = material.category?.toLowerCase() || '';
+            const name = material.name?.toLowerCase() || '';
+            
+            // ❌ Exclude keywords untuk services/add-ons
+            const excludedKeywords = [
+              'service', 'add-on', 'addon', 'jasa',
+              'print', 'design', 'custom', 'fee', 'biaya'
+            ];
+            
+            const hasExcludedKeyword = excludedKeywords.some(keyword => 
+              category.includes(keyword) || name.includes(keyword)
+            );
+            
+            // ✅ Hanya material dengan price > 0 dan bukan service
+            return material.pricePerM2 > 0 && !hasExcludedKeyword;
+          });
+          
+          setMaterials(physicalMaterials);
+          console.log(`✅ Loaded ${physicalMaterials.length} physical materials`);
         }
       } catch (error) {
         console.error("❌ Error fetching materials:", error);
