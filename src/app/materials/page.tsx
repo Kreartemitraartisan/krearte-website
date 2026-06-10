@@ -4,203 +4,79 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight, Sparkles, Layers, Shield, Droplets, Sun } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { useState, useEffect } from "react";
+
+interface Material {
+  id: string;
+  name: string;
+  category: string;
+  pricePerM2: number;
+  width: string;
+  effectiveWidth?: number;
+  waste: number;
+  stock: number;
+  description?: string;
+  imageUrl?: string;
+  is25DEligible?: boolean;
+}
 
 export default function MaterialsPage() {
-  const materials = [
-    {
-      category: "Wallpaper Standard (PVC Coated)",
-      description: "Our signature collection. Durable, versatile, and available in 9 unique textures. Perfect for high-traffic areas while maintaining elegance.",
-      icon: Layers,
-      products: [
-        {
-          name: "PVC Wallcoverings - Smooth Sand",
-          code: "Krearte-BST 8626-7",
-          texture: "Smooth",
-          width: "1.06m (Print: 1.04m)",
-          price: 345000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Smooth+Sand+PVC",
-          description: "Clean, minimal, and endlessly adaptable. The foundation of Krearte collection.",
-          bestFor: "Living rooms, bedrooms, offices",
-        },
-        {
-          name: "PVC Wallcoverings - Industrial",
-          code: "Krearte-BST 8622-1",
-          texture: "Industrial",
-          width: "1.06m (Print: 1.04m)",
-          price: 345000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Industrial+PVC",
-          description: "Raw, urban aesthetic with durable PVC coating.",
-          bestFor: "Commercial spaces, lofts, modern interiors",
-        },
-        {
-          name: "Self Adhesive - Art Fabric",
-          code: "DX340A-E2",
-          texture: "Fabric Back",
-          width: "1.52m (Print: 1.5m)",
-          price: 335000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Self+Adhesive+Fabric",
-          description: "DIY-friendly without compromising quality. Peel, stick, transform.",
-          bestFor: "Quick renovations, rental spaces",
-        },
-      ],
-    },
-    {
-      category: "Special Effect Wallpaper (Metallic)",
-      description: "Where light meets texture. Our metallic finishes catch and reflect light, creating dynamic spaces that change throughout the day.",
-      icon: Sparkles,
-      products: [
-        {
-          name: "Straw Raw Texture Metallic",
-          code: "DE030K",
-          texture: "Gold",
-          width: "1.07m (Print: 1.05m)",
-          price: 400000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic",
-          description: "Subtle shimmer with organic texture. Luxury that doesn't shout.",
-          bestFor: "Feature walls, dining rooms",
-        },
-        {
-          name: "Straw Raw Texture Metallic FLX",
-          code: "DE030K",
-          texture: "Flex",
-          width: "1.07m (Print: 1.05m)",
-          price: 450000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Straw+Raw+Metallic+FLX",
-          description: "Enhanced flexibility with metallic finish.",
-          bestFor: "Curved surfaces, architectural features",
-        },
-        {
-          name: "Abstract Embossing Texture-Metallic",
-          code: "WP137-Silver 01",
-          texture: "Silver Metallic",
-          width: "1.37m (Print: 1.35m)",
-          price: 750000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Abstract+Embossing",
-          description: "Bold patterns with reflective depth. Art for your walls.",
-          bestFor: "Statement walls, galleries, boutiques",
-        },
-        {
-          name: "Silver/Gold Metallic",
-          code: "PGS/PSSS 01",
-          texture: "Metallic",
-          width: "1.07m (Print: 1.05m)",
-          price: 500000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Silver+Gold+Metallic",
-          description: "Premium metallic finish. Note: Non-join installation.",
-          bestFor: "Luxury residences, feature walls",
-          note: "⚠️ NON JOIN INSTALLATION",
-        },
-        {
-          name: "Metallic Silver Japanese Silk",
-          code: "XQ-4097",
-          texture: "Metallic Silk",
-          width: "1.37m (Print: 1.35m)",
-          price: 860000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Japanese+Silk",
-          description: "Our premium offering. Inspired by traditional Japanese craftsmanship.",
-          bestFor: "Luxury residences, high-end hospitality",
-        },
-        {
-          name: "White or Creamy Raw Texture",
-          code: "XQ-4011/XQ-4030",
-          texture: "Non-Woven",
-          width: "1.37m (Print: 1.35m)",
-          price: 450000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=White+Creamy+Raw",
-          description: "Breathable material that's easy to install and remove.",
-          bestFor: "Eco-friendly projects, temporary installations",
-        },
-        {
-          name: "Art Texture",
-          code: "YM-0937",
-          texture: "Raw Texture",
-          width: "1.37m (Print: 1.35m)",
-          price: 400000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Art+Texture",
-          description: "Artistic texture with natural appeal.",
-          bestFor: "Creative spaces, studios",
-        },
-      ],
-    },
-    {
-      category: "Non-Woven & Fabric Back",
-      description: "Breathable, eco-conscious materials with superior durability. Perfect for those who value sustainability without compromising on style.",
-      icon: Shield,
-      products: [
-        {
-          name: "Linen (While Stock Last!)",
-          code: "N/A",
-          texture: "Linen",
-          width: "1.2/1.38/1.59/2.78m",
-          price: 375000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Linen+Non+Woven",
-          description: "Natural linen texture with eco-friendly non-woven backing.",
-          bestFor: "Eco-conscious projects, residential",
-          note: "⚠️ Limited stock available",
-        },
-        {
-          name: "Plain Smooth (While Stock Last!)",
-          code: "N3001",
-          texture: "Smooth",
-          width: "1.26m (Print: 1.25m)",
-          price: 300000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Plain+Smooth",
-          description: "Clean, minimalist finish. Great base for any space.",
-          bestFor: "Minimalist designs, offices",
-          note: "⚠️ Limited stock available",
-        },
-        {
-          name: "Cross Hatch Linen",
-          code: "M69",
-          texture: "Cross Hatch",
-          width: "1.4m (Print: 1.38m)",
-          price: 385000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Cross+Hatch+Linen",
-          description: "The perfect balance between durability and sophistication.",
-          bestFor: "Commercial spaces, hospitality",
-        },
-        {
-          name: "Fine Sand Texture",
-          code: "M70",
-          texture: "Fine Sand",
-          width: "1.4m (Print: 1.38m)",
-          price: 385000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Fine+Sand+Texture",
-          description: "Subtle sand texture with fabric backing.",
-          bestFor: "Hotels, restaurants, offices",
-        },
-      ],
-    },
-    {
-      category: "Special Services",
-      description: "For the extraordinary. These finishes transform wallcoverings into immersive experiences.",
-      icon: Sun,
-      products: [
-        {
-          name: "2.5D Print Effect",
-          code: "Add-On",
-          texture: "Raised Print",
-          width: "N/A",
-          price: 500000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=2.5D+Print+Effect",
-          description: "Add-on service. Your chosen pattern with tactile depth you can feel.",
-          bestFor: "Art walls, branded spaces, installations",
-          note: "Add-on: +Rp 500.000/m² from base material price",
-        },
-        {
-          name: "Custom Print Service",
-          code: "Custom",
-          texture: "Your Design",
-          width: "Variable",
-          price: 200000,
-          image: "https://placehold.co/800x600/e8e6e1/333333?text=Custom+Print",
-          description: "Bring your vision to life. Any pattern, any color, any size.",
-          bestFor: "Branded spaces, personal art, unique projects",
-          note: "Add-on: +Rp 200.000/m² from base material price",
-        },
-      ],
-    },
-  ];
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchMaterials() {
+      try {
+        const response = await fetch("/api/materials");
+        const result = await response.json();
+        
+        if (result.success) {
+          setMaterials(result.materials || []);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching materials:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMaterials();
+  }, []);
+
+  // Group materials by category
+  const groupedMaterials = materials.reduce((acc, material) => {
+    const category = material.category || "Other";
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(material);
+    return acc;
+  }, {} as Record<string, Material[]>);
+
+  const getCategoryIcon = (category: string) => {
+    const cat = category.toLowerCase();
+    if (cat.includes("metallic") || cat.includes("special")) return Sparkles;
+    if (cat.includes("fabric") || cat.includes("non-woven")) return Shield;
+    if (cat.includes("service") || cat.includes("add-on")) return Sun;
+    return Layers;
+  };
+
+  const getCategoryDescription = (category: string) => {
+    const cat = category.toLowerCase();
+    if (cat.includes("pvc") || cat.includes("wallcovering")) {
+      return "Our signature collection. Durable, versatile, and available in unique textures. Perfect for high-traffic areas while maintaining elegance.";
+    }
+    if (cat.includes("metallic") || cat.includes("special")) {
+      return "Where light meets texture. Our metallic finishes catch and reflect light, creating dynamic spaces that change throughout the day.";
+    }
+    if (cat.includes("fabric") || cat.includes("non-woven")) {
+      return "Breathable, eco-conscious materials with superior durability. Perfect for those who value sustainability without compromising on style.";
+    }
+    if (cat.includes("service") || cat.includes("add-on")) {
+      return "For the extraordinary. These finishes transform wallcoverings into immersive experiences.";
+    }
+    return "Premium quality materials for your wallcovering needs.";
+  };
 
   const features = [
     {
@@ -224,6 +100,14 @@ export default function MaterialsPage() {
       description: "Professional installation recommended. Samples available before commitment.",
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-krearte-cream flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-krearte-black border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-krearte-cream">
@@ -260,120 +144,143 @@ export default function MaterialsPage() {
       <section className="py-24 md:py-32 bg-krearte-cream">
         <div className="container mx-auto px-6 md:px-12">
           <div className="space-y-32">
-            {materials.map((category, categoryIndex) => (
-              <motion.div
-                key={category.category}
-                initial={{ opacity: 0, y: 50 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.8 }}
-              >
-                {/* Category Header */}
-                <div className="flex items-start gap-6 mb-12">
-                  <div className="w-16 h-16 bg-krearte-black rounded-full flex items-center justify-center flex-shrink-0">
-                    <category.icon className="w-8 h-8 text-krearte-white" />
+            {Object.entries(groupedMaterials).map(([category, categoryMaterials], categoryIndex) => {
+              const Icon = getCategoryIcon(category);
+              
+              return (
+                <motion.div
+                  key={category}
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-100px" }}
+                  transition={{ duration: 0.8 }}
+                >
+                  {/* Category Header */}
+                  <div className="flex items-start gap-6 mb-12">
+                    <div className="w-16 h-16 bg-krearte-black rounded-full flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-8 h-8 text-krearte-white" />
+                    </div>
+                    <div>
+                      <h2 className="font-sans text-3xl md:text-4xl font-light mb-4 text-krearte-black">
+                        {category}
+                      </h2>
+                      <p className="text-lg font-light text-krearte-gray-600 leading-relaxed max-w-3xl">
+                        {getCategoryDescription(category)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-sans text-3xl md:text-4xl font-light mb-4 text-krearte-black">
-                      {category.category}
-                    </h2>
-                    <p className="text-lg font-light text-krearte-gray-600 leading-relaxed max-w-3xl">
-                      {category.description}
-                    </p>
-                  </div>
-                </div>
 
-                {/* Products Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {category.products.map((product, productIndex) => (
-                    <motion.div
-                      key={product.name}
-                      initial={{ opacity: 0, y: 30 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: productIndex * 0.1 }}
-                      className="bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:border-krearte-black transition-colors group"
-                    >
-                      {/* ✅ CLOSE-UP IMAGE DI ATAS CARD */}
-                      <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
-                        <img
-                          src={product.image || "https://placehold.co/800x600/e8e6e1/333333?text=Material+Closeup"}
-                          alt={`${product.name} material close-up detail`}
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                        />
-                        {/* Optional: Texture badge overlay on image */}
-                        <div className="absolute top-4 left-4 bg-krearte-black/80 backdrop-blur-sm text-krearte-white text-xs px-3 py-1 rounded-full">
-                          {product.texture}
-                        </div>
-                      </div>
+                  {/* Products Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {categoryMaterials.map((material, productIndex) => (
+                      <motion.div
+                        key={material.id}
+                        initial={{ opacity: 0, y: 30 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: productIndex * 0.1 }}
+                        className="bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:border-krearte-black transition-colors group"
+                      >
+                        {/* ✅ REAL IMAGE FROM DATABASE */}
+                        <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
+                          {material.imageUrl ? (
+                            <img
+                              src={material.imageUrl}
+                              alt={`${material.name} material close-up detail`}
+                              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://placehold.co/800x600/e8e6e1/333333?text=Material+Closeup";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-krearte-gray-400 bg-krearte-gray-100">
+                              <Layers className="w-12 h-12" />
+                            </div>
+                          )}
+                          
+                          {/* Width badge overlay on image */}
+                          {material.width && (
+                            <div className="absolute top-4 left-4 bg-krearte-black/80 backdrop-blur-sm text-krearte-white text-xs px-3 py-1 rounded-full">
+                              {material.width}
+                            </div>
+                          )}
 
-                      {/* Card Content */}
-                      <div className="p-6">
-                        {/* Product Name */}
-                        <h3 className="font-sans text-xl font-normal mb-3 text-krearte-black group-hover:underline decoration-krearte-gray-300 underline-offset-4">
-                          {product.name}
-                        </h3>
-
-                        {/* Product Code */}
-                        {product.code && product.code !== "N/A" && (
-                          <p className="text-xs font-medium text-krearte-gray-500 mb-2">
-                            Code: {product.code}
-                          </p>
-                        )}
-
-                        {/* Width Info */}
-                        {product.width && (
-                          <p className="text-xs font-medium text-krearte-gray-500 mb-3">
-                            Width: {product.width}
-                          </p>
-                        )}
-
-                        {/* Description */}
-                        <p className="text-sm font-light text-krearte-gray-600 mb-4 leading-relaxed">
-                          {product.description}
-                        </p>
-
-                        {/* Best For */}
-                        <div className="mb-4">
-                          <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
-                            Best For
-                          </p>
-                          <p className="text-sm font-light text-krearte-gray-600">
-                            {product.bestFor}
-                          </p>
-                        </div>
-
-                        {/* Price */}
-                        <div className="pt-4 border-t border-krearte-gray-100">
-                          <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
-                            Starting From
-                          </p>
-                          <p className="text-lg font-normal text-krearte-black">
-                            {formatCurrency(product.price)}<span className="text-sm font-light text-krearte-gray-500">/m²</span>
-                          </p>
-                          {product.note && (
-                            <p className="text-xs text-krearte-gray-400 mt-1">
-                              {product.note}
-                            </p>
+                          {/* 2.5D Badge */}
+                          {material.is25DEligible && (
+                            <div className="absolute top-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-krearte-white text-xs px-3 py-1 rounded-full flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" />
+                              2.5D
+                            </div>
                           )}
                         </div>
 
-                        {/* CTA */}
-                        <div className="mt-6">
-                          <Link
-                            href="/materials#samples"
-                            className="inline-flex items-center text-sm font-medium text-krearte-black hover:text-krearte-gray-600 transition-colors"
-                          >
-                            Order Sample
-                            <ArrowRight className="w-4 h-4 ml-2" />
-                          </Link>
+                        {/* Card Content */}
+                        <div className="p-6">
+                          {/* Material Name */}
+                          <h3 className="font-sans text-xl font-normal mb-2 text-krearte-black group-hover:underline decoration-krearte-gray-300 underline-offset-4">
+                            {material.name}
+                          </h3>
+
+                          {/* Category */}
+                          <p className="text-xs font-medium text-krearte-gray-500 mb-3">
+                            {material.category}
+                          </p>
+
+                          {/* Description */}
+                          {material.description && (
+                            <p className="text-sm font-light text-krearte-gray-600 mb-4 leading-relaxed">
+                              {material.description}
+                            </p>
+                          )}
+
+                          {/* Width & Effective Width */}
+                          <div className="mb-4 space-y-1">
+                            {material.effectiveWidth && (
+                              <p className="text-xs text-krearte-gray-500">
+                                Effective Width: {material.effectiveWidth}m
+                              </p>
+                            )}
+                            {material.waste > 0 && (
+                              <p className="text-xs text-krearte-gray-500">
+                                Waste: {material.waste}%
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Price */}
+                          <div className="pt-4 border-t border-krearte-gray-100">
+                            <p className="text-xs font-medium text-krearte-gray-500 uppercase tracking-wider mb-1">
+                              Starting From
+                            </p>
+                            <p className="text-lg font-normal text-krearte-black">
+                              {formatCurrency(material.pricePerM2)}<span className="text-sm font-light text-krearte-gray-500">/m²</span>
+                            </p>
+                            
+                            {/* Stock Info */}
+                            {material.stock !== undefined && (
+                              <p className={`text-xs mt-1 ${material.stock > 0 ? 'text-krearte-gray-500' : 'text-red-500'}`}>
+                                Stock: {material.stock} m² {material.stock === 0 && "(Out of stock)"}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* CTA */}
+                          <div className="mt-6">
+                            <Link
+                              href="/custom"
+                              className="inline-flex items-center text-sm font-medium text-krearte-black hover:text-krearte-gray-600 transition-colors"
+                            >
+                              Order Now
+                              <ArrowRight className="w-4 h-4 ml-2" />
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
