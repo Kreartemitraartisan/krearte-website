@@ -18,6 +18,7 @@ interface Material {
   description?: string;
   imageUrl?: string;
   is25DEligible?: boolean;
+  samplePriceA3?: number;
 }
 
 export default function MaterialsPage() {
@@ -253,17 +254,24 @@ export default function MaterialsPage() {
                             </p>
                           )}
 
-                          {/* Width & Effective Width */}
-                          <div className="mb-4 space-y-1">
+                          {/* ✅ Material Specs: Effective Width & Sample Price */}
+                          <div className="mb-4 space-y-2">
+                            {/* Effective Width */}
                             {material.effectiveWidth && (
-                              <p className="text-xs text-krearte-gray-500">
-                                Effective Width: {material.effectiveWidth}m
-                              </p>
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-krearte-gray-500">Effective Width:</span>
+                                <span className="font-medium text-krearte-black">{material.effectiveWidth}m</span>
+                              </div>
                             )}
-                            {material.waste > 0 && (
-                              <p className="text-xs text-krearte-gray-500">
-                                Waste: {material.waste}%
-                              </p>
+                            
+                            {/* Sample Price */}
+                            {material.samplePriceA3 && material.samplePriceA3 > 0 && (
+                              <div className="pt-2 mt-2 border-t border-krearte-gray-100">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium text-krearte-gray-500 uppercase">Sample (A3)</span>
+                                  <span className="text-sm font-normal text-krearte-black">{formatCurrency(material.samplePriceA3)}</span>
+                                </div>
+                              </div>
                             )}
                           </div>
 
