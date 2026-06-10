@@ -99,6 +99,15 @@ export default function MaterialsPage() {
     return "Premium quality materials for your wallcovering needs.";
   };
 
+  // ✅ Helper: Format width dengan konsisten (tambah "m" jika tidak ada)
+  const formatWidth = (width: string) => {
+    if (!width) return '';
+    // Kalau sudah ada "m" di akhir, return as-is
+    if (width.toLowerCase().endsWith('m')) return width;
+    // Kalau tidak, tambah "m"
+    return `${width}m`;
+  };
+
   const features = [
     {
       icon: Shield,
@@ -202,7 +211,7 @@ export default function MaterialsPage() {
                         transition={{ delay: productIndex * 0.1 }}
                         className="bg-krearte-white rounded-lg border border-krearte-gray-200 overflow-hidden hover:border-krearte-black transition-colors group"
                       >
-                        {/* ✅ REAL IMAGE FROM DATABASE */}
+                        {/* ✅ IMAGE WITH BADGES */}
                         <div className="aspect-[4/3] bg-krearte-gray-100 overflow-hidden relative">
                           {material.imageUrl ? (
                             <img
@@ -219,16 +228,9 @@ export default function MaterialsPage() {
                             </div>
                           )}
                           
-                          {/* Width badge overlay on image */}
-                          {material.width && (
-                            <div className="absolute top-4 left-4 bg-krearte-black/80 backdrop-blur-sm text-krearte-white text-xs px-3 py-1 rounded-full">
-                              {material.width}
-                            </div>
-                          )}
-
-                          {/* 2.5D Badge */}
+                          {/* ✅ 2.5D Badge Only (width badge dihapus) */}
                           {material.is25DEligible && (
-                            <div className="absolute top-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-krearte-white text-xs px-3 py-1 rounded-full flex items-center gap-1">
+                            <div className="absolute top-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-krearte-white text-xs px-3 py-1 rounded-full flex items-center gap-1 shadow-lg">
                               <Sparkles className="w-3 h-3" />
                               2.5D
                             </div>
@@ -254,12 +256,22 @@ export default function MaterialsPage() {
                             </p>
                           )}
 
-                          {/* ✅ Material Specs: Effective Width & Sample Price */}
+                          {/* ✅ Material Specs: Width, Effective Width & Sample Price */}
                           <div className="mb-4 space-y-2">
+                            {/* Width */}
+                            {material.width && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-krearte-gray-500">Width:</span>
+                                <span className="font-medium text-krearte-black">
+                                  {formatWidth(material.width)}
+                                </span>
+                              </div>
+                            )}
+                            
                             {/* Effective Width */}
                             {material.effectiveWidth && (
                               <div className="flex items-center justify-between text-xs">
-                                <span className="text-krearte-gray-500">Effective Width:</span>
+                                <span className="text-krearte-gray-500">Effective:</span>
                                 <span className="font-medium text-krearte-black">{material.effectiveWidth}m</span>
                               </div>
                             )}
