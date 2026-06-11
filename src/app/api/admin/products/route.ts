@@ -1,86 +1,133 @@
 // /app/api/admin/products/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ GET - Fetch all products (PUBLIC - NO AUTH)
+// ✅ HELPER: Check if material is physical
+// =========================
+function isPhysicalMaterial(material: any): boolean {
+  const category = (material.category || "").toLowerCase();
+  const name = (material.name || "").toLowerCase();
+  
+  const price = Number(material.pricePerM2) || 0;
+
+  const excludedKeywords = [
+    "service", "add-on", "addon", "jasa", 
+    "print", "design", "redesign", "sample",
+    "custom", "fee", "biaya"
+  ];
+
+  const hasExcludedKeyword = excludedKeywords.some(keyword => 
+    category.includes(keyword) || name.includes(keyword)
+  );
+
+  const MIN_MATERIAL_PRICE = 50000;
+  
+  return price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
+}
+
+// =========================
+// ✅ GET - Fetch all products WITH price range
 // =========================
 export async function GET() {
   try {
-    console.log('🚀 [Products API] Fetching products...');
+    console.log('🚀 [Products API] Starting fetch...');
+    
+    await prisma.$connect();
+    console.log('✅ Database connected');
 
+    console.log('📦 Fetching products...');
     const products = await prisma.product.findMany({
       orderBy: { createdAt: "desc" },
       include: { sizes: true },
     });
 
-    console.log(`[Products API] Found ${products.length} products`);
+    console.log(`✅ Found ${products.length} products`);
 
     const productsWithPriceRange = await Promise.all(
       products.map(async (product) => {
-        const materialIds = product.availableMaterialIds || [];
+        try {
+          const materialIds = product.availableMaterialIds || [];
 
-        console.log(`\n[Product: ${product.name}]`);
-        console.log(`  - Material IDs: ${materialIds.length} materials`);
+          console.log(`\n[Product: ${product.name}]`);
+          console.log(`  - Material IDs count: ${materialIds.length}`);
 
-        if (!materialIds || materialIds.length === 0) {
-          console.log(`  - ⚠️ No materials linked, using base price`);
+          if (!materialIds || materialIds.length === 0) {
+            console.log(`  - ⚠️ No materials linked`);
+            return {
+              ...product,
+              priceRange: { min: product.price || 0, max: product.price || 0 },
+              physicalMaterialCount: 0,
+            };
+          }
+
+          console.log(`  - Fetching materials from DB...`);
+          const materials = await prisma.material.findMany({
+            where: { id: { in: materialIds } },
+            select: { 
+              id: true, 
+              name: true, 
+              category: true, 
+              pricePerM2: true, 
+              waste: true 
+            },
+          });
+
+          console.log(`  - Materials found: ${materials.length}`);
+
+          const physicalMaterials = materials.filter(isPhysicalMaterial);
+          console.log(`  - Physical materials: ${physicalMaterials.length}`);
+
+          const materialsToUse = physicalMaterials.length > 0 ? physicalMaterials : materials;
+
+          if (materialsToUse.length === 0) {
+            console.log(`  - ⚠️ No valid materials, using base price`);
+            return {
+              ...product,
+              priceRange: { min: product.price || 0, max: product.price || 0 },
+              physicalMaterialCount: 0,
+            };
+          }
+
+          materialsToUse.forEach(m => {
+            console.log(`    • ${m.name}: Rp ${m.pricePerM2}`);
+          });
+
+          const prices = materialsToUse.map((m) => {
+            const basePrice = Number(m.pricePerM2) || 0;
+            return basePrice;
+          });
+
+          const minPrice = Math.min(...prices);
+          const maxPrice = Math.max(...prices);
+
+          console.log(`  - ✅ Price Range: Rp ${minPrice} - Rp ${maxPrice}`);
+
+          return {
+            ...product,
+            priceRange: {
+              min: Math.round(minPrice),
+              max: Math.round(maxPrice),
+            },
+            physicalMaterialCount: physicalMaterials.length,
+            totalMaterialCount: materials.length,
+          };
+        } catch (err) {
+          console.error(`[Product: ${product.id}] Error:`, err);
           return {
             ...product,
             priceRange: { min: product.price || 0, max: product.price || 0 },
+            physicalMaterialCount: 0,
           };
         }
-
-        // Fetch materials
-        const materials = await prisma.material.findMany({
-          where: { id: { in: materialIds } },
-          select: { 
-            id: true, 
-            name: true, 
-            pricePerM2: true,
-          },
-        });
-
-        console.log(`  - Materials found: ${materials.length}`);
-
-        if (materials.length === 0) {
-          console.log(`  - ⚠️ No materials found in DB`);
-          return {
-            ...product,
-            priceRange: { min: product.price || 0, max: product.price || 0 },
-          };
-        }
-
-        // Log material prices
-        materials.forEach(m => {
-          console.log(`    • ${m.name}: Rp ${m.pricePerM2}`);
-        });
-
-        // ✅ Calculate price range: LANGSUNG dari pricePerM2 (tanpa waste)
-        const prices = materials.map((m) => Number(m.pricePerM2) || 0);
-
-        const minPrice = Math.min(...prices);
-        const maxPrice = Math.max(...prices);
-
-        console.log(`  - ✅ Price Range: Rp ${minPrice} - Rp ${maxPrice}`);
-
-        return {
-          ...product,
-          priceRange: {
-            min: Math.round(minPrice),
-            max: Math.round(maxPrice),
-          },
-        };
       })
     );
 
-    console.log(`\n[Products API] ✅ Processed ${productsWithPriceRange.length} products`);
+    console.log(`\n✅ [Products API] Success: ${productsWithPriceRange.length} products`);
 
     return NextResponse.json({
       success: true,
@@ -89,11 +136,22 @@ export async function GET() {
     });
 
   } catch (error: any) {
-    console.error("❌ [Products API] GET ERROR:", error);
+    console.error("❌ [Products API] ERROR:", error);
+    console.error("❌ Error name:", error?.name);
+    console.error("❌ Error message:", error?.message);
+    console.error("❌ Error code:", error?.code);
+    console.error("❌ Error stack:", error?.stack);
+    
     return NextResponse.json(
-      { success: false, error: "Failed to fetch products" },
+      { 
+        success: false, 
+        error: error?.message || "Failed to fetch products",
+        code: error?.code,
+      },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -102,21 +160,6 @@ export async function GET() {
 // =========================
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { role: true },
-    });
-
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-    }
-
     const body = await request.json();
 
     if (!body.name?.trim() || !body.slug?.trim()) {
@@ -147,7 +190,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("❌ [Products API] POST ERROR:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to create product" },
+      { success: false, error: error?.message || "Failed to create product" },
       { status: 500 }
     );
   }
