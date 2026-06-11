@@ -112,7 +112,6 @@ export default function ProductDetail() {
     }
   }, [params.slug]);
 
-  // ✅ UPDATED: Pisahkan 2.5D effect DULU sebelum filter services
   useEffect(() => {
     async function fetchMaterials() {
       if (!params.slug || !product) return;
@@ -132,7 +131,7 @@ export default function ProductDetail() {
           
           // Extract 2.5D items first
           const twoFiveDItems = allItems.filter(is25DItem);
-          const non25DItems = allItems.filter(m => !is25DItem(m));
+          const non25DItems = allItems.filter((m: Material) => !is25DItem(m));
           
           // Filter materials (exclude services, samples, and 2.5D)
           const materialsOnly = non25DItems.filter((m: Material) => {
@@ -178,7 +177,7 @@ export default function ProductDetail() {
               name: item.name,
               description: item.description || 'Raised texture effect',
               price: item.pricePerM2,
-              type: 'effect' as const  // ✅ PASTIKAN TYPE 'effect'
+              type: 'effect' as const
             });
           });
           
