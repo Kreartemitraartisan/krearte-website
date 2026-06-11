@@ -8,16 +8,12 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ GET: Fetch all materials
+// ✅ GET: Fetch all materials (PUBLIC - NO AUTH)
 // =========================
 export async function GET() {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
+    // ✅ HAPUS AUTH CHECK - API ini harus public untuk /materials page
+    
     // Fetch all materials
     const materials = await prisma.material.findMany({
       orderBy: { createdAt: "desc" },
@@ -34,7 +30,7 @@ export async function GET() {
 }
 
 // =========================
-// ✅ PUT: Update material
+// ✅ PUT: Update material (ADMIN ONLY)
 // =========================
 export async function PUT(request: NextRequest) {
   try {
@@ -67,7 +63,6 @@ export async function PUT(request: NextRequest) {
         stock: Number(data.stock) || 0,
         is25DEligible: Boolean(data.is25DEligible),
         description: data.description?.trim() || null,
-        // ✅ imageUrl dari VPS upload (URL string)
         imageUrl: data.imageUrl || null,
         updatedAt: new Date(),
       },
@@ -77,7 +72,6 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error("❌ [Materials API] PUT Error:", error);
     
-    // Handle Prisma errors
     if (error?.code === "P2025") {
       return NextResponse.json({ error: "Material not found" }, { status: 404 });
     }
@@ -90,7 +84,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // =========================
-// ✅ POST: Create new material
+// ✅ POST: Create new material (ADMIN ONLY)
 // =========================
 export async function POST(request: NextRequest) {
   try {
@@ -123,7 +117,6 @@ export async function POST(request: NextRequest) {
         stock: Number(body.stock) || 0,
         is25DEligible: Boolean(body.is25DEligible),
         description: body.description?.trim() || null,
-        // ✅ imageUrl dari VPS upload (URL string)
         imageUrl: body.imageUrl || null,
       },
     });
@@ -139,7 +132,7 @@ export async function POST(request: NextRequest) {
 }
 
 // =========================
-// ✅ DELETE: Delete material (Optional)
+// ✅ DELETE: Delete material (ADMIN ONLY)
 // =========================
 export async function DELETE(request: NextRequest) {
   try {
