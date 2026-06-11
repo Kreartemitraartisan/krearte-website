@@ -257,34 +257,26 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ UPDATED: Panel info dengan perhitungan yang benar
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
     const effectiveWidth = selectedMaterial.effectiveWidth || 
                           (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
     
-    // ✅ Print area WITH bleed (width+6cm, height+6cm)
     const printWidthCm = widthCm + 6;
     const printHeightCm = heightCm + 6;
     
-    // ✅ Round to 2 decimals
     const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
-    // Hitung panel menggunakan effectiveWidth
     const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
-    // ✅ FIX: Tambah trim allowance 4cm untuk atas/bawah
     const trimAllowanceCm = 4;
     const materialHeightPerPanelM = (printHeightCm + trimAllowanceCm) / 100;
     
-    // Total material area
     const totalPanelArea = panelsNeeded * effectiveWidth * materialHeightPerPanelM;
     
-    // ✅ Round totalPanelArea to 2 decimals
     const roundedTotalPanelArea = Math.round(totalPanelArea * 100) / 100;
     
-    // Waste = Material Needed - Print Area
     const wasteArea = Math.round((roundedTotalPanelArea - printArea) * 100) / 100;
     
     return {
@@ -298,7 +290,6 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ UPDATED: Calculate total price dengan logika yang benar
   const calculateTotalPrice = () => {
     if (!selectedMaterial && product) {
       const areaM2 = (widthCm / 100) * (heightCm / 100);
@@ -309,45 +300,34 @@ export default function ProductDetail() {
     const effectiveWidth = selectedMaterial.effectiveWidth || 
                           (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
     
-    // ✅ Print area WITH bleed
     const printWidthCm = widthCm + 6;
     const printHeightCm = heightCm + 6;
     const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
-    // Hitung panel
     const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
-    // ✅ FIX: Tambah trim allowance
     const trimAllowanceCm = 4;
     const materialHeightPerPanelM = (printHeightCm + trimAllowanceCm) / 100;
     
-    // Total material area
     const totalPanelArea = Math.round((panelsNeeded * effectiveWidth * materialHeightPerPanelM) * 100) / 100;
     
-    // Waste
     const wasteArea = Math.round((totalPanelArea - printArea) * 100) / 100;
     
     const { price: materialPrice } = getPriceByRole(selectedMaterial);
     const wastePrice = selectedMaterial.waste || 60000;
 
-    // ✅ Material cost dari PRINT AREA
     const materialCost = Math.round(printArea * materialPrice);
-    
-    // ✅ Waste cost dari WASTE AREA
     const wasteCost = Math.round(wasteArea * wastePrice);
     
     let totalPrice = materialCost + wasteCost;
     
-    // ✅ Add-Ons calculation dengan Math.round
     selectedAddOns.forEach(addOnId => {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
-          // ✅ 2.5D Effect: harga per m² × print area
           const addonCost = Math.round(addOn.price * printArea);
           totalPrice += addonCost;
         } else {
-          // Service: harga fixed
           totalPrice += addOn.price;
         }
       }
@@ -356,14 +336,30 @@ export default function ProductDetail() {
     return totalPrice;
   };
 
-  // ✅ FIX: Function untuk hitung add-on total
-  const calculateAddOnTotal = (addOnId: string) => {
+  const calculateAddOnTotal = (addOnId: string): number => {
     const addOn = addOns.find(a => a.id === addOnId);
-    if (!addOn || !panelInfo) return 0;
+    if (!addOn) return 0;
+    
+    // ✅ DEBUG LOG
+    console.log('🧮 [calculateAddOnTotal] AddOn:', addOn);
+    console.log('🧮 [calculateAddOnTotal] Type:', addOn.type);
+    console.log('🧮 [calculateAddOnTotal] Price:', addOn.price);
     
     if (addOn.type === 'effect') {
-      return Math.round(addOn.price * panelInfo.printArea);
+      // ✅ Effect type: harga per m² × print area
+      const currentPanelInfo = getPanelInfo();
+      if (!currentPanelInfo) {
+        console.log('❌ [calculateAddOnTotal] No panelInfo, returning 0');
+        return 0;
+      }
+      
+      const total = Math.round(addOn.price * currentPanelInfo.printArea);
+      console.log('✅ [calculateAddOnTotal] Effect calculation:', addOn.price, '×', currentPanelInfo.printArea, '=', total);
+      return total;
     }
+    
+    // ✅ Service type: harga fixed
+    console.log('✅ [calculateAddOnTotal] Service (fixed price):', addOn.price);
     return addOn.price;
   };
 
