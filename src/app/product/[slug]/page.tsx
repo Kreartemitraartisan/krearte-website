@@ -112,6 +112,7 @@ export default function ProductDetail() {
     }
   }, [params.slug]);
 
+  // ✅ UPDATED: Pisahkan 2.5D effect DULU sebelum filter services
   useEffect(() => {
     async function fetchMaterials() {
       if (!params.slug || !product) return;
@@ -123,7 +124,18 @@ export default function ProductDetail() {
         if (result.success) {
           const allItems = result.materials || [];
           
-          const materialsOnly = allItems.filter((m: Material) => {
+          // ✅ FIX: Pisahkan 2.5D effect DULU sebelum filter services
+          const is25DItem = (m: Material) => {
+            const name = m.name.toLowerCase();
+            return name.includes('2.5d') || name.includes('25d');
+          };
+          
+          // Extract 2.5D items first
+          const twoFiveDItems = allItems.filter(is25DItem);
+          const non25DItems = allItems.filter(m => !is25DItem(m));
+          
+          // Filter materials (exclude services, samples, and 2.5D)
+          const materialsOnly = non25DItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
             
@@ -132,20 +144,18 @@ export default function ProductDetail() {
                    !cat.includes('add-on') &&
                    !cat.includes('print') &&
                    !cat.includes('design') &&
-                   !name.includes('2.5d') &&
                    !name.includes('sample') &&
                    m.pricePerM2 > 0;
           });
 
-          const servicesOnly = allItems.filter((m: Material) => {
+          // Filter services (exclude samples)
+          const servicesOnly = non25DItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
             
             const isService = cat.includes('service') || 
                              cat.includes('jasa') || 
-                             cat.includes('add-on') ||
-                             cat.includes('print') ||
-                             cat.includes('design');
+                             cat.includes('add-on');
             
             const isSample = name.includes('sample') || cat.includes('sample');
             
@@ -158,34 +168,36 @@ export default function ProductDetail() {
             type: 'service' as const
           }));
           
-          const isDesignerCollection = product.collectionType === 'designer' || product.is25DEligible;
-          
+          // ✅ Build add-ons list
           let allAddOns = [...servicesOnly];
           
-          if (isDesignerCollection && product.is25DEligible) {
-            const existing25D = allItems.find((m: Material) => 
-              m.name.toLowerCase().includes('2.5d') || 
-              m.name.toLowerCase().includes('25d')
-            );
-            
-            if (existing25D) {
-              allAddOns.push({
-                id: existing25D.id,
-                name: existing25D.name,
-                description: existing25D.description || 'Raised texture effect',
-                price: existing25D.pricePerM2,
-                type: 'effect' as const
-              });
-            } else {
-              allAddOns.push({
-                id: '25d-effect',
-                name: '2.5D Print Effect',
-                description: 'Raised texture that you can feel - adds depth and luxury',
-                price: 500000,
-                type: 'effect' as const
-              });
-            }
+          // Add 2.5D effects as 'effect' type
+          twoFiveDItems.forEach((item: Material) => {
+            allAddOns.push({
+              id: item.id,
+              name: item.name,
+              description: item.description || 'Raised texture effect',
+              price: item.pricePerM2,
+              type: 'effect' as const  // ✅ PASTIKAN TYPE 'effect'
+            });
+          });
+          
+          // If product is eligible but no 2.5D material found, create default
+          const isDesignerCollection = product.collectionType === 'designer' || product.is25DEligible;
+          if (isDesignerCollection && product.is25DEligible && twoFiveDItems.length === 0) {
+            allAddOns.push({
+              id: '25d-effect-default',
+              name: '2.5D Print Effect',
+              description: 'Raised texture that you can feel - adds depth and luxury',
+              price: 500000,
+              type: 'effect' as const
+            });
           }
+          
+          console.log('📦 [Materials] Materials only:', materialsOnly.length);
+          console.log('📦 [Add-Ons] Services:', servicesOnly.length);
+          console.log('📦 [Add-Ons] 2.5D Items:', twoFiveDItems.length);
+          console.log('📦 [Add-Ons] Total add-ons:', allAddOns);
           
           setMaterials(materialsOnly);
           setAddOns(allAddOns);
@@ -340,13 +352,11 @@ export default function ProductDetail() {
     const addOn = addOns.find(a => a.id === addOnId);
     if (!addOn) return 0;
     
-    // ✅ DEBUG LOG
     console.log('🧮 [calculateAddOnTotal] AddOn:', addOn);
     console.log('🧮 [calculateAddOnTotal] Type:', addOn.type);
     console.log('🧮 [calculateAddOnTotal] Price:', addOn.price);
     
     if (addOn.type === 'effect') {
-      // ✅ Effect type: harga per m² × print area
       const currentPanelInfo = getPanelInfo();
       if (!currentPanelInfo) {
         console.log('❌ [calculateAddOnTotal] No panelInfo, returning 0');
@@ -358,7 +368,6 @@ export default function ProductDetail() {
       return total;
     }
     
-    // ✅ Service type: harga fixed
     console.log('✅ [calculateAddOnTotal] Service (fixed price):', addOn.price);
     return addOn.price;
   };
