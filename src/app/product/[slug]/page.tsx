@@ -38,7 +38,6 @@ interface Material {
   name: string;
   category: string;
   width: string | null;
-  // ✅ NEW: Effective width dari database
   effectiveWidth?: number | null;
   pricePerM2: number;
   designerPricePerM2?: number;
@@ -76,11 +75,9 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   
-  // Material states
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   
-  // Dimensions dalam CM
   const [widthCm, setWidthCm] = useState<number>(100);
   const [heightCm, setHeightCm] = useState<number>(100);
   
@@ -88,15 +85,12 @@ export default function ProductDetail() {
   const [loadingMaterials, setLoadingMaterials] = useState(true);
   const materialContainerRef = useRef<HTMLDivElement>(null);
   
-  // Add-Ons states
   const [addOns, setAddOns] = useState<AddOn[]>([]);
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
   const [isAddOnsOpen, setIsAddOnsOpen] = useState(false);
   
-  // Wishlist
   const { isInWishlist, toggleWishlist, loading: wishlistLoading } = useWishlist();
   
-  // Fetch product
   useEffect(() => {
     async function fetchProduct() {
       try {
@@ -118,7 +112,6 @@ export default function ProductDetail() {
     }
   }, [params.slug]);
 
-  // ✅ FIX: Fetch materials dan pisahkan menjadi Materials & Add-Ons
   useEffect(() => {
     async function fetchMaterials() {
       if (!params.slug || !product) return;
@@ -130,7 +123,6 @@ export default function ProductDetail() {
         if (result.success) {
           const allItems = result.materials || [];
           
-          // ✅ FIX: Filter Materials
           const materialsOnly = allItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
@@ -145,7 +137,6 @@ export default function ProductDetail() {
                    m.pricePerM2 > 0;
           });
 
-          // ✅ FIX: Filter Services/Add-Ons
           const servicesOnly = allItems.filter((m: Material) => {
             const cat = m.category.toLowerCase();
             const name = m.name.toLowerCase();
@@ -167,7 +158,6 @@ export default function ProductDetail() {
             type: 'service' as const
           }));
           
-          // 2.5D Print Effect
           const isDesignerCollection = product.collectionType === 'designer' || product.is25DEligible;
           
           let allAddOns = [...servicesOnly];
@@ -191,7 +181,7 @@ export default function ProductDetail() {
                 id: '25d-effect',
                 name: '2.5D Print Effect',
                 description: 'Raised texture that you can feel - adds depth and luxury',
-                price: 500000, // Rp 500.000/m²
+                price: 500000,
                 type: 'effect' as const
               });
             }
@@ -223,7 +213,6 @@ export default function ProductDetail() {
     fetchMaterials();
   }, [params.slug, product]);
 
-  // Wheel handler
   useEffect(() => {
     const container = materialContainerRef.current;
     if (!container) return;
@@ -268,44 +257,40 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ UPDATED: Gunakan effectiveWidth dari database
+  // ✅ UPDATED: Panel info dengan perhitungan yang benar (match sistem biru/ungu)
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
-    // ✅ Ambil effectiveWidth dari database, fallback ke width atau 1.03
     const effectiveWidth = selectedMaterial.effectiveWidth || 
                           (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
     
-    // Print area (area desain sebenarnya)
-    const printWidth = widthCm / 100;
-    const printHeight = heightCm / 100;
-    const printArea = printWidth * printHeight;
+    // ✅ Print area WITH bleed (width+6cm, height+6cm)
+    const printWidthCm = widthCm + 6;
+    const printHeightCm = heightCm + 6;
+    const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
-    // Area dengan overlap
-    const widthWithOverlap = (widthCm + 6) / 100; // +3cm tiap sisi
-    const heightWithOverlap = (heightCm + 6) / 100;
-    
-    // ✅ Hitung panel menggunakan effectiveWidth
-    const panelsNeeded = Math.ceil(widthWithOverlap / effectiveWidth);
+    // Hitung panel menggunakan effectiveWidth
+    const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
     // Total material area
-    const totalPanelArea = panelsNeeded * (effectiveWidth * heightWithOverlap);
+    const materialHeightPerPanelM = printHeightCm / 100;
+    const totalPanelArea = Math.round((panelsNeeded * effectiveWidth * materialHeightPerPanelM) * 100) / 100;
     
-    // Waste
-    const wasteArea = totalPanelArea - printArea;
+    // Waste = Material Needed - Print Area
+    const wasteArea = Math.round((totalPanelArea - printArea) * 100) / 100;
     
     return {
+      printWidthCm,
+      printHeightCm,
       printArea,
-      widthWithOverlap,
-      heightWithOverlap,
       panelsNeeded,
       wasteArea,
       totalPanelArea,
-      effectiveWidth, // Untuk display
+      effectiveWidth,
     };
   };
 
-  // ✅ UPDATED: Calculate total price dengan effectiveWidth
+  // ✅ UPDATED: Calculate total price dengan logika yang benar
   const calculateTotalPrice = () => {
     if (!selectedMaterial && product) {
       const areaM2 = (widthCm / 100) * (heightCm / 100);
@@ -313,40 +298,42 @@ export default function ProductDetail() {
     }
     if (!selectedMaterial) return 0;
     
-    // ✅ Ambil effectiveWidth
     const effectiveWidth = selectedMaterial.effectiveWidth || 
                           (selectedMaterial.width ? parseFloat(selectedMaterial.width) : 1.03);
     
-    const widthWithOverlap = (widthCm + 6) / 100;
-    const heightWithOverlap = (heightCm + 6) / 100;
-    
-    // Print area (untuk perhitungan material & 2.5D)
-    const printArea = (widthCm / 100) * (heightCm / 100);
+    // ✅ Print area WITH bleed
+    const printWidthCm = widthCm + 6;
+    const printHeightCm = heightCm + 6;
+    const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
     // Hitung panel
-    const panelsNeeded = Math.ceil(widthWithOverlap / effectiveWidth);
+    const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
     // Total material area
-    const totalPanelArea = panelsNeeded * (effectiveWidth * heightWithOverlap);
+    const materialHeightPerPanelM = printHeightCm / 100;
+    const totalPanelArea = Math.round((panelsNeeded * effectiveWidth * materialHeightPerPanelM) * 100) / 100;
     
     // Waste
-    const wasteArea = totalPanelArea - printArea;
+    const wasteArea = Math.round((totalPanelArea - printArea) * 100) / 100;
     
     const { price: materialPrice } = getPriceByRole(selectedMaterial);
     const wastePrice = selectedMaterial.waste || 60000;
 
-    const materialCost = printArea * materialPrice;
-    const wasteCost = wasteArea * wastePrice;
+    // ✅ Material cost dari PRINT AREA
+    const materialCost = Math.round(printArea * materialPrice);
+    
+    // ✅ Waste cost dari WASTE AREA
+    const wasteCost = Math.round(wasteArea * wastePrice);
     
     let totalPrice = materialCost + wasteCost;
     
-    // Perhitungan Add-Ons
+    // ✅ Add-Ons calculation
     selectedAddOns.forEach(addOnId => {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
-          // 2.5D Effect: harga per m² × print area
-          totalPrice += addOn.price * printArea;
+          // ✅ 2.5D Effect: harga per m² × print area
+          totalPrice += Math.round(addOn.price * printArea);
         } else {
           // Service: harga fixed
           totalPrice += addOn.price;
@@ -756,7 +743,7 @@ export default function ProductDetail() {
                       
                       <div className="flex justify-between text-sm border-b border-krearte-gray-200 pb-2">
                         <span className="font-light text-krearte-gray-600">With 3cm overlap:</span>
-                        <span className="font-normal text-krearte-black">{widthCm + 6}cm × {heightCm + 6}cm = {panelInfo.widthWithOverlap.toFixed(2)}m × {panelInfo.heightWithOverlap.toFixed(2)}m</span>
+                        <span className="font-normal text-krearte-black">{panelInfo.printWidthCm}cm × {panelInfo.printHeightCm}cm = {panelInfo.printArea.toFixed(2)} m²</span>
                       </div>
                       
                       {selectedMaterial && (
@@ -793,7 +780,7 @@ export default function ProductDetail() {
                         </>
                       )}
                       
-                      {/* ✅ Add-Ons Breakdown dengan perhitungan yang benar */}
+                      {/* Add-Ons Breakdown */}
                       {selectedAddOns.length > 0 && (
                         <div className="border-t border-krearte-gray-200 pt-2 mt-2 space-y-1">
                           <p className="text-xs font-medium text-krearte-gray-600 mb-2">Add-Ons:</p>
@@ -802,7 +789,7 @@ export default function ProductDetail() {
                             if (!addOn) return null;
                             
                             const addOnTotal = addOn.type === 'effect' && panelInfo 
-                              ? addOn.price * panelInfo.printArea 
+                              ? Math.round(addOn.price * panelInfo.printArea)
                               : addOn.price;
                             
                             return (
