@@ -257,7 +257,7 @@ export default function ProductDetail() {
     };
   };
 
-  // ✅ UPDATED: Panel info dengan perhitungan yang benar (match sistem biru/ungu)
+  // ✅ UPDATED: Panel info dengan perhitungan yang benar
   const getPanelInfo = () => {
     if (!selectedMaterial) return null;
     
@@ -268,14 +268,17 @@ export default function ProductDetail() {
     const printWidthCm = widthCm + 6;
     const printHeightCm = heightCm + 6;
     
-    // ✅ Round to 2 decimals IMMEDIATELY
+    // ✅ Round to 2 decimals
     const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
     // Hitung panel menggunakan effectiveWidth
     const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
-    // ✅ Material needed: panels × effectiveWidth × height (in meters)
-    const materialHeightPerPanelM = printHeightCm / 100;
+    // ✅ FIX: Tambah trim allowance 4cm untuk atas/bawah
+    const trimAllowanceCm = 4;
+    const materialHeightPerPanelM = (printHeightCm + trimAllowanceCm) / 100;
+    
+    // Total material area
     const totalPanelArea = panelsNeeded * effectiveWidth * materialHeightPerPanelM;
     
     // ✅ Round totalPanelArea to 2 decimals
@@ -314,8 +317,11 @@ export default function ProductDetail() {
     // Hitung panel
     const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
+    // ✅ FIX: Tambah trim allowance
+    const trimAllowanceCm = 4;
+    const materialHeightPerPanelM = (printHeightCm + trimAllowanceCm) / 100;
+    
     // Total material area
-    const materialHeightPerPanelM = printHeightCm / 100;
     const totalPanelArea = Math.round((panelsNeeded * effectiveWidth * materialHeightPerPanelM) * 100) / 100;
     
     // Waste
@@ -332,12 +338,12 @@ export default function ProductDetail() {
     
     let totalPrice = materialCost + wasteCost;
     
-    // ✅ Add-Ons calculation
+    // ✅ Add-Ons calculation dengan Math.round
     selectedAddOns.forEach(addOnId => {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
-          // ✅ 2.5D Effect: harga per m² × print area (BUKAN flat!)
+          // ✅ 2.5D Effect: harga per m² × print area
           const addonCost = Math.round(addOn.price * printArea);
           totalPrice += addonCost;
         } else {
@@ -348,6 +354,17 @@ export default function ProductDetail() {
     });
     
     return totalPrice;
+  };
+
+  // ✅ FIX: Function untuk hitung add-on total
+  const calculateAddOnTotal = (addOnId: string) => {
+    const addOn = addOns.find(a => a.id === addOnId);
+    if (!addOn || !panelInfo) return 0;
+    
+    if (addOn.type === 'effect') {
+      return Math.round(addOn.price * panelInfo.printArea);
+    }
+    return addOn.price;
   };
 
   const calculatedPrice = calculateTotalPrice();
@@ -679,13 +696,11 @@ export default function ProductDetail() {
                       {addOns.length > 0 && <span className="text-xs text-krearte-gray-500">({selectedAddOns.length} selected)</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {selectedAddOns.length > 0 && (
+                      {selectedAddOns.length > 0 && panelInfo && (
                         <span className="text-sm font-normal text-krearte-black">
                           {formatCurrency(
                             selectedAddOns.reduce((total, addOnId) => {
-                              const addOn = addOns.find(a => a.id === addOnId);
-                              if (!addOn) return total;
-                              return total + (addOn.type === 'effect' && panelInfo ? addOn.price * panelInfo.printArea : addOn.price);
+                              return total + calculateAddOnTotal(addOnId);
                             }, 0)
                           )}
                         </span>
@@ -714,7 +729,7 @@ export default function ProductDetail() {
                             <p className="text-xs font-light text-krearte-gray-500 mb-1">{addOn.description}</p>
                             {addOn.type === 'effect' && panelInfo && (
                               <p className="text-xs text-krearte-gray-400">
-                                = {formatCurrency(addOn.price * panelInfo.printArea)} for {panelInfo.printArea.toFixed(2)} m²
+                                = {formatCurrency(Math.round(addOn.price * panelInfo.printArea))} for {panelInfo.printArea.toFixed(2)} m²
                               </p>
                             )}
                           </div>
@@ -794,9 +809,7 @@ export default function ProductDetail() {
                             const addOn = addOns.find(a => a.id === addOnId);
                             if (!addOn) return null;
                             
-                            const addOnTotal = addOn.type === 'effect' && panelInfo 
-                              ? Math.round(addOn.price * panelInfo.printArea)
-                              : addOn.price;
+                            const addOnTotal = calculateAddOnTotal(addOnId);
                             
                             return (
                               <div key={addOnId} className="flex justify-between text-sm">
