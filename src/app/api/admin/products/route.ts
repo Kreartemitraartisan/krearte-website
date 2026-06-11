@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ GET - Fetch all products
+// ✅ GET - Fetch all products (PUBLIC - NO AUTH)
 // =========================
 export async function GET() {
   try {
@@ -98,7 +98,7 @@ export async function GET() {
 }
 
 // =========================
-// ✅ POST - Create product
+// ✅ POST - Create product (ADMIN ONLY)
 // =========================
 export async function POST(request: NextRequest) {
   try {
