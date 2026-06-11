@@ -267,17 +267,22 @@ export default function ProductDetail() {
     // ✅ Print area WITH bleed (width+6cm, height+6cm)
     const printWidthCm = widthCm + 6;
     const printHeightCm = heightCm + 6;
+    
+    // ✅ Round to 2 decimals IMMEDIATELY
     const printArea = Math.round(((printWidthCm / 100) * (printHeightCm / 100)) * 100) / 100;
     
     // Hitung panel menggunakan effectiveWidth
     const panelsNeeded = Math.ceil(printWidthCm / (effectiveWidth * 100));
     
-    // Total material area
+    // ✅ Material needed: panels × effectiveWidth × height (in meters)
     const materialHeightPerPanelM = printHeightCm / 100;
-    const totalPanelArea = Math.round((panelsNeeded * effectiveWidth * materialHeightPerPanelM) * 100) / 100;
+    const totalPanelArea = panelsNeeded * effectiveWidth * materialHeightPerPanelM;
+    
+    // ✅ Round totalPanelArea to 2 decimals
+    const roundedTotalPanelArea = Math.round(totalPanelArea * 100) / 100;
     
     // Waste = Material Needed - Print Area
-    const wasteArea = Math.round((totalPanelArea - printArea) * 100) / 100;
+    const wasteArea = Math.round((roundedTotalPanelArea - printArea) * 100) / 100;
     
     return {
       printWidthCm,
@@ -285,7 +290,7 @@ export default function ProductDetail() {
       printArea,
       panelsNeeded,
       wasteArea,
-      totalPanelArea,
+      totalPanelArea: roundedTotalPanelArea,
       effectiveWidth,
     };
   };
@@ -332,8 +337,9 @@ export default function ProductDetail() {
       const addOn = addOns.find(a => a.id === addOnId);
       if (addOn) {
         if (addOn.type === 'effect') {
-          // ✅ 2.5D Effect: harga per m² × print area
-          totalPrice += Math.round(addOn.price * printArea);
+          // ✅ 2.5D Effect: harga per m² × print area (BUKAN flat!)
+          const addonCost = Math.round(addOn.price * printArea);
+          totalPrice += addonCost;
         } else {
           // Service: harga fixed
           totalPrice += addOn.price;
