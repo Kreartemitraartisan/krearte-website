@@ -36,6 +36,8 @@ interface Category {
   image_url: string | null;
   collection_type: string;
   parent_id: string | null;
+  // ✅ Tambah keywords untuk matching
+  keywords?: string[];
 }
 
 interface GalleryItem {
@@ -47,37 +49,42 @@ interface GalleryItem {
 }
 
 // ================= CONSTANTS =================
+// ✅ Categories dengan keywords untuk matching products
 const FALLBACK_CATEGORIES: Category[] = [
   {
     id: "1",
-    name: "Zen Collection",
-    slug: "zen",
-    description: "Minimalist patterns inspired by Japanese aesthetics",
-    image_url: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800&h=1000&fit=crop",
+    name: "Flower & Leaves",
+    slug: "flower-leaves",
+    description: "Beautiful floral patterns and botanical leaf designs",
+    image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
+    keywords: ["flower", "floral", "leaf", "leaves", "botanical", "bloom", "rose", "garden"],
   },
   {
     id: "2",
-    name: "Floral & Botanical",
-    slug: "flower-leaves",
-    description: "Beautiful floral patterns and botanical designs",
-    image_url: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=800&h=1000&fit=crop",
+    name: "Chinoiserie",
+    slug: "chinoiserie",
+    description: "Asian-inspired oriental designs with traditional motifs",
+    image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
+    keywords: ["chinoiserie", "asian", "oriental", "chinese", "japanese", "dynasty", "pagoda", "mountain", "scroll", "imperial", "alabaster", "cloud"],
   },
   {
     id: "3",
-    name: "Geometric Patterns",
-    slug: "geometric",
-    description: "Modern geometric shapes and patterns",
-    image_url: "https://images.unsplash.com/photo-1561577707-0eb0e1b116fd?w=800&h=1000&fit=crop",
+    name: "Lotus",
+    slug: "lotus",
+    description: "Sacred lotus flower patterns and water garden themes",
+    image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
+    keywords: ["lotus", "water", "pond", "lily", "sacred"],
   },
 ];
 
-const SHUFFLE_INTERVAL = 15 * 60 * 1000;
+// ✅ Shuffle interval: 3 menit (180000 ms)
+const SHUFFLE_INTERVAL = 3 * 60 * 1000;
 
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -113,15 +120,13 @@ export default function HomePage() {
         });
         
         if (result.success) {
-          const wallcoveringProducts = (result.products || [])
-            .filter((p: Product) => 
-              p.collectionType?.toLowerCase() === 'wallcovering' &&
-              p.images && p.images.length > 0
-            )
-            .slice(0, 12);
+          // ✅ Ambil semua products yang punya images (tidak filter collectionType)
+          const productsWithImages = (result.products || [])
+            .filter((p: Product) => p.images && p.images.length > 0)
+            .slice(0, 30); // Ambil lebih banyak untuk shuffle
           
-          console.log(`✅ Loaded ${wallcoveringProducts.length} featured products`);
-          setFeaturedProducts(wallcoveringProducts);
+          console.log(`✅ Loaded ${productsWithImages.length} products with images`);
+          setFeaturedProducts(productsWithImages);
         }
       } catch (error) {
         console.error("❌ Error fetching products:", error);
@@ -132,15 +137,24 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
-  // 2. Fetch Categories
+  // 2. Fetch Categories - Merge dengan FALLBACK untuk dapat keywords
   useEffect(() => {
     async function fetchCategories() {
       try {
         const response = await fetch('/api/categories?collectionType=wallcovering&parentId=null');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
+        
         if (result.success && result.categories && result.categories.length > 0) {
-          setCategories(result.categories.slice(0, 3));
+          // ✅ Merge dengan FALLBACK untuk dapat keywords
+          const mergedCategories = result.categories.slice(0, 3).map((cat: Category) => {
+            const fallback = FALLBACK_CATEGORIES.find(f => f.slug === cat.slug);
+            return {
+              ...cat,
+              keywords: fallback?.keywords || [],
+            };
+          });
+          setCategories(mergedCategories);
         } else {
           setCategories(FALLBACK_CATEGORIES);
         }
@@ -174,30 +188,54 @@ export default function HomePage() {
     fetchGallery();
   }, []);
 
-  // 4. Shuffle Logic
+  // ✅ 4. Helper: Match product ke category
+  const matchProductToCategory = useCallback((product: Product, category: Category): boolean => {
+    // Priority 1: Match by category_slug
+    if (product.category_slug && product.category_slug === category.slug) return true;
+    
+    // Priority 2: Match by category name (case-insensitive)
+    if (product.category && product.category.toLowerCase() === category.name.toLowerCase()) return true;
+    
+    // Priority 3: Match by keywords di product name/description
+    if (category.keywords && category.keywords.length > 0) {
+      const searchText = `${product.name} ${product.description || ''}`.toLowerCase();
+      return category.keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
+    }
+    
+    return false;
+  }, []);
+
+  // ✅ 5. Shuffle Logic - Ganti gambar setiap 3 menit
   useEffect(() => {
-    if (shuffleInitialized.current) return;
     if (categories.length === 0 || featuredProducts.length === 0) return;
     
-    shuffleInitialized.current = true;
-
     const performShuffle = () => {
+      console.log('🎲 Performing shuffle...');
       const newIndex: Record<string, number> = {};
       
       categories.forEach((category) => {
-        const categoryProducts = featuredProducts.filter(
-          p => p.category_slug === category.slug || p.category === category.slug
-        );
+        // Cari products yang match dengan category ini
+        const categoryProducts = featuredProducts.filter(p => matchProductToCategory(p, category));
+        
+        console.log(`📊 [${category.name}] Found ${categoryProducts.length} matching products`);
         
         if (categoryProducts.length > 0) {
+          // Pilih random index
           newIndex[category.id] = Math.floor(Math.random() * categoryProducts.length);
+        } else {
+          // Fallback: pakai featured products pertama
+          newIndex[category.id] = 0;
         }
       });
       
       setCategoryImageIndex(newIndex);
     };
 
+    // Jalankan shuffle pertama kali
     performShuffle();
+    shuffleInitialized.current = true;
+    
+    // Setup interval untuk shuffle setiap 3 menit
     intervalRef.current = setInterval(performShuffle, SHUFFLE_INTERVAL);
 
     return () => {
@@ -205,30 +243,39 @@ export default function HomePage() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [categories, featuredProducts]);
+  }, [categories, featuredProducts, matchProductToCategory]);
 
-  // Helper untuk mengambil gambar kategori
-  const getCategoryHeroImage = useCallback((category: Category) => {
-    // ✅ PRIORITASKAN: category.image_url dulu
+  // ✅ 6. Helper: Ambil gambar kategori
+  const getCategoryHeroImage = useCallback((category: Category): { image: string | null; productName: string } => {
+    // Priority 1: category.image_url dari database
     if (category.image_url) {
-      return category.image_url;
+      return { image: category.image_url, productName: category.name };
     }
     
-    // Fallback: cari dari products
-    const categoryProducts = featuredProducts.filter(
-      p => p.category_slug === category.slug || p.category === category.slug
-    );
+    // Priority 2: Cari product yang match dengan category
+    const categoryProducts = featuredProducts.filter(p => matchProductToCategory(p, category));
     
-    if (categoryProducts.length === 0) return null;
+    if (categoryProducts.length === 0) {
+      // Fallback: pakai featured products pertama
+      const fallbackProduct = featuredProducts[0];
+      if (fallbackProduct?.images) {
+        const img = fallbackProduct.images.find(i => i && !i.endsWith('.mp4') && !i.endsWith('.webm'));
+        return { image: img || null, productName: fallbackProduct.name };
+      }
+      return { image: null, productName: category.name };
+    }
     
+    // Ambil product berdasarkan shuffle index
     const currentIndex = categoryImageIndex[category.id] ?? 0;
-    const selectedProduct = categoryProducts[currentIndex];
+    const selectedProduct = categoryProducts[currentIndex] || categoryProducts[0];
     
     const images = selectedProduct?.images || [];
-    return images.find(img => img && !img.endsWith('.mp4') && !img.endsWith('.webm')) || null;
-  }, [featuredProducts, categoryImageIndex]);
+    const img = images.find(i => i && !i.endsWith('.mp4') && !i.endsWith('.webm'));
+    
+    return { image: img || null, productName: selectedProduct?.name || category.name };
+  }, [featuredProducts, categoryImageIndex, matchProductToCategory]);
 
-  // HELPER: Format price dengan priority priceRange > base price
+  // HELPER: Format price
   const formatProductPrice = (product: Product) => {
     if (product.priceRange && product.priceRange.min > 0) {
       const min = formatCurrency(product.priceRange.min);
@@ -319,6 +366,7 @@ export default function HomePage() {
           <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8 }} className="mb-16">
             <span className="text-xs font-medium tracking-widest uppercase text-krearte-gray-500 mb-4 block">Shop by Category</span>
             <h2 className="font-sans text-4xl md:text-5xl font-light">Featured Collections</h2>
+            <p className="text-sm text-krearte-gray-500 font-light mt-2">Images rotate every 3 minutes</p>
           </motion.div>
 
           {loadingCategories ? (
@@ -334,15 +382,21 @@ export default function HomePage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
               {categories.map((category, index) => {
-                const heroImage = getCategoryHeroImage(category);
+                const { image: heroImage, productName } = getCategoryHeroImage(category);
                 return (
-                  <motion.div key={category.id} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }}>
+                  <motion.div 
+                    key={category.id} 
+                    initial={{ opacity: 0, y: 40 }} 
+                    whileInView={{ opacity: 1, y: 0 }} 
+                    viewport={{ once: true }} 
+                    transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                  >
                     <Link href={`/collection/wallcovering/${category.slug}`} className="group relative block aspect-[4/5] rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-500">
                       {heroImage ? (
                         <img 
                           key={`${category.id}-${categoryImageIndex[category.id]}`} 
                           src={heroImage} 
-                          alt={category.name} 
+                          alt={`${category.name} - ${productName}`} 
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
                           loading="lazy" 
                         />
@@ -475,7 +529,6 @@ export default function HomePage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]">
               {galleryItems.map((item, index) => {
-                // Layout pattern: besar, kecil, kecil, kecil, besar vertikal, lebar
                 const spanClass = index === 0 ? "md:row-span-2 md:col-span-2" :
                                   index === 4 ? "md:col-span-1 md:row-span-2" :
                                   index === 5 ? "md:col-span-2" :
