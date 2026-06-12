@@ -36,8 +36,6 @@ interface Category {
   image_url: string | null;
   collection_type: string;
   parent_id: string | null;
-  // ✅ Tambah keywords untuk matching
-  keywords?: string[];
 }
 
 interface GalleryItem {
@@ -49,7 +47,6 @@ interface GalleryItem {
 }
 
 // ================= CONSTANTS =================
-// ✅ Categories dengan keywords untuk matching products
 const FALLBACK_CATEGORIES: Category[] = [
   {
     id: "1",
@@ -59,7 +56,6 @@ const FALLBACK_CATEGORIES: Category[] = [
     image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
-    keywords: ["flower", "floral", "leaf", "leaves", "botanical", "bloom", "rose", "garden"],
   },
   {
     id: "2",
@@ -69,7 +65,6 @@ const FALLBACK_CATEGORIES: Category[] = [
     image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
-    keywords: ["chinoiserie", "asian", "oriental", "chinese", "japanese", "dynasty", "pagoda", "mountain", "scroll", "imperial", "alabaster", "cloud"],
   },
   {
     id: "3",
@@ -79,11 +74,10 @@ const FALLBACK_CATEGORIES: Category[] = [
     image_url: null,
     collection_type: "wallcovering",
     parent_id: null,
-    keywords: ["lotus", "water", "pond", "lily", "sacred"],
   },
 ];
 
-// ✅ Shuffle interval: 3 menit (180000 ms)
+// Shuffle interval: 3 menit (180000 ms)
 const SHUFFLE_INTERVAL = 3 * 60 * 1000;
 
 export default function HomePage() {
@@ -108,7 +102,7 @@ export default function HomePage() {
   useEffect(() => {
     async function fetchProducts() {
       try {
-        console.log('🔍 Fetching featured products from admin API...');
+        console.log('🔍 Fetching all products from admin API...');
         
         const response = await fetch("/api/admin/products");
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -120,13 +114,12 @@ export default function HomePage() {
         });
         
         if (result.success) {
-          // ✅ Ambil semua products yang punya images (tidak filter collectionType)
-          const productsWithImages = (result.products || [])
-            .filter((p: Product) => p.images && p.images.length > 0)
-            .slice(0, 30); // Ambil lebih banyak untuk shuffle
+          // ✅ Ambil SEMUA products yang punya images (tidak difilter collectionType)
+          const allProducts = (result.products || [])
+            .filter((p: Product) => p.images && p.images.length > 0);
           
-          console.log(`✅ Loaded ${productsWithImages.length} products with images`);
-          setFeaturedProducts(productsWithImages);
+          console.log(`✅ Loaded ${allProducts.length} products with images`);
+          setFeaturedProducts(allProducts);
         }
       } catch (error) {
         console.error("❌ Error fetching products:", error);
@@ -137,7 +130,7 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
-  // 2. Fetch Categories - Merge dengan FALLBACK untuk dapat keywords
+  // 2. Fetch Categories
   useEffect(() => {
     async function fetchCategories() {
       try {
@@ -146,17 +139,11 @@ export default function HomePage() {
         const result = await response.json();
         
         if (result.success && result.categories && result.categories.length > 0) {
-          // ✅ Merge dengan FALLBACK untuk dapat keywords
-          const mergedCategories = result.categories.slice(0, 3).map((cat: Category) => {
-            const fallback = FALLBACK_CATEGORIES.find(f => f.slug === cat.slug);
-            return {
-              ...cat,
-              keywords: fallback?.keywords || [],
-            };
-          });
-          setCategories(mergedCategories);
+          setCategories(result.categories.slice(0, 3));
+          console.log('✅ Categories loaded:', result.categories.slice(0, 3).map((c: Category) => c.slug));
         } else {
           setCategories(FALLBACK_CATEGORIES);
+          console.log('⚠️ Using fallback categories');
         }
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -188,18 +175,21 @@ export default function HomePage() {
     fetchGallery();
   }, []);
 
-  // ✅ 4. Helper: Match product ke category
+  // ✅ 4. Helper: Match product ke category berdasarkan category_slug atau category
   const matchProductToCategory = useCallback((product: Product, category: Category): boolean => {
-    // Priority 1: Match by category_slug
-    if (product.category_slug && product.category_slug === category.slug) return true;
+    // Priority 1: Match by category_slug (exact match)
+    if (product.category_slug && product.category_slug === category.slug) {
+      return true;
+    }
     
-    // Priority 2: Match by category name (case-insensitive)
-    if (product.category && product.category.toLowerCase() === category.name.toLowerCase()) return true;
+    // Priority 2: Match by category field (case-insensitive)
+    if (product.category && product.category.toLowerCase() === category.name.toLowerCase()) {
+      return true;
+    }
     
-    // Priority 3: Match by keywords di product name/description
-    if (category.keywords && category.keywords.length > 0) {
-      const searchText = `${product.name} ${product.description || ''}`.toLowerCase();
-      return category.keywords.some(keyword => searchText.includes(keyword.toLowerCase()));
+    // Priority 3: Match by category field contains category slug
+    if (product.category && product.category.toLowerCase().includes(category.slug.toLowerCase())) {
+      return true;
     }
     
     return false;
@@ -214,16 +204,16 @@ export default function HomePage() {
       const newIndex: Record<string, number> = {};
       
       categories.forEach((category) => {
-        // Cari products yang match dengan category ini
+        // ✅ Cari products yang match dengan category ini berdasarkan category_slug/category
         const categoryProducts = featuredProducts.filter(p => matchProductToCategory(p, category));
         
-        console.log(`📊 [${category.name}] Found ${categoryProducts.length} matching products`);
+        console.log(`📊 [${category.name} (${category.slug})] Found ${categoryProducts.length} matching products`);
         
         if (categoryProducts.length > 0) {
           // Pilih random index
           newIndex[category.id] = Math.floor(Math.random() * categoryProducts.length);
         } else {
-          // Fallback: pakai featured products pertama
+          // Fallback: pakai index 0
           newIndex[category.id] = 0;
         }
       });
@@ -245,15 +235,17 @@ export default function HomePage() {
     };
   }, [categories, featuredProducts, matchProductToCategory]);
 
-  // ✅ 6. Helper: Ambil gambar kategori
+  // ✅ 6. Helper: Ambil gambar kategori dari product yang sesuai category
   const getCategoryHeroImage = useCallback((category: Category): { image: string | null; productName: string } => {
     // Priority 1: category.image_url dari database
     if (category.image_url) {
       return { image: category.image_url, productName: category.name };
     }
     
-    // Priority 2: Cari product yang match dengan category
+    // Priority 2: Cari product yang match dengan category berdasarkan category_slug/category
     const categoryProducts = featuredProducts.filter(p => matchProductToCategory(p, category));
+    
+    console.log(`🖼️ [${category.name}] Found ${categoryProducts.length} products for category ${category.slug}`);
     
     if (categoryProducts.length === 0) {
       // Fallback: pakai featured products pertama
