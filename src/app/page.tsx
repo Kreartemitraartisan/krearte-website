@@ -25,7 +25,6 @@ interface Product {
   images: string[] | null;
   sizes: ProductSize[];
   collectionType?: string;
-  // ✅ TAMBAHKAN: priceRange dari API admin
   priceRange?: { min: number; max: number } | null;
 }
 
@@ -39,6 +38,14 @@ interface Category {
   parent_id: string | null;
 }
 
+interface GalleryItem {
+  id: string;
+  title: string;
+  description: string | null;
+  imageUrl: string;
+  category: string;
+}
+
 // ================= CONSTANTS =================
 const FALLBACK_CATEGORIES: Category[] = [
   {
@@ -46,7 +53,7 @@ const FALLBACK_CATEGORIES: Category[] = [
     name: "Zen Collection",
     slug: "zen",
     description: "Minimalist patterns inspired by Japanese aesthetics",
-    image_url: null,
+    image_url: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800&h=1000&fit=crop",
     collection_type: "wallcovering",
     parent_id: null,
   },
@@ -55,7 +62,7 @@ const FALLBACK_CATEGORIES: Category[] = [
     name: "Floral & Botanical",
     slug: "flower-leaves",
     description: "Beautiful floral patterns and botanical designs",
-    image_url: null,
+    image_url: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=800&h=1000&fit=crop",
     collection_type: "wallcovering",
     parent_id: null,
   },
@@ -64,7 +71,7 @@ const FALLBACK_CATEGORIES: Category[] = [
     name: "Geometric Patterns",
     slug: "geometric",
     description: "Modern geometric shapes and patterns",
-    image_url: null,
+    image_url: "https://images.unsplash.com/photo-1561577707-0eb0e1b116fd?w=800&h=1000&fit=crop",
     collection_type: "wallcovering",
     parent_id: null,
   },
@@ -81,20 +88,21 @@ export default function HomePage() {
   
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingGallery, setLoadingGallery] = useState(true);
   const [categoryImageIndex, setCategoryImageIndex] = useState<Record<string, number>>({});
   
   const shuffleInitialized = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ 1. Fetch Products dari API ADMIN (yang return priceRange)
+  // 1. Fetch Products dari API ADMIN
   useEffect(() => {
     async function fetchProducts() {
       try {
         console.log('🔍 Fetching featured products from admin API...');
         
-        // ✅ Gunakan API admin yang sudah return priceRange
         const response = await fetch("/api/admin/products");
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const result = await response.json();
@@ -105,13 +113,12 @@ export default function HomePage() {
         });
         
         if (result.success) {
-          // ✅ Filter: hanya wallcovering products yang punya images
           const wallcoveringProducts = (result.products || [])
             .filter((p: Product) => 
               p.collectionType?.toLowerCase() === 'wallcovering' &&
               p.images && p.images.length > 0
             )
-            .slice(0, 12); // Limit 12 untuk homepage
+            .slice(0, 12);
           
           console.log(`✅ Loaded ${wallcoveringProducts.length} featured products`);
           setFeaturedProducts(wallcoveringProducts);
@@ -147,7 +154,27 @@ export default function HomePage() {
     fetchCategories();
   }, []);
 
-  // 3. Shuffle Logic
+  // 3. Fetch Gallery Items
+  useEffect(() => {
+    async function fetchGallery() {
+      try {
+        const response = await fetch('/api/gallery');
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const result = await response.json();
+        
+        if (result.success && result.gallery && result.gallery.length > 0) {
+          setGalleryItems(result.gallery.slice(0, 6));
+        }
+      } catch (error) {
+        console.error("Error fetching gallery:", error);
+      } finally {
+        setLoadingGallery(false);
+      }
+    }
+    fetchGallery();
+  }, []);
+
+  // 4. Shuffle Logic
   useEffect(() => {
     if (shuffleInitialized.current) return;
     if (categories.length === 0 || featuredProducts.length === 0) return;
@@ -178,10 +205,16 @@ export default function HomePage() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [categories, featuredProducts]); // ✅ Tambahkan dependencies
+  }, [categories, featuredProducts]);
 
   // Helper untuk mengambil gambar kategori
   const getCategoryHeroImage = useCallback((category: Category) => {
+    // ✅ PRIORITASKAN: category.image_url dulu
+    if (category.image_url) {
+      return category.image_url;
+    }
+    
+    // Fallback: cari dari products
     const categoryProducts = featuredProducts.filter(
       p => p.category_slug === category.slug || p.category === category.slug
     );
@@ -195,7 +228,7 @@ export default function HomePage() {
     return images.find(img => img && !img.endsWith('.mp4') && !img.endsWith('.webm')) || null;
   }, [featuredProducts, categoryImageIndex]);
 
-  // ✅ HELPER: Format price dengan priority priceRange > base price
+  // HELPER: Format price dengan priority priceRange > base price
   const formatProductPrice = (product: Product) => {
     if (product.priceRange && product.priceRange.min > 0) {
       const min = formatCurrency(product.priceRange.min);
@@ -306,7 +339,13 @@ export default function HomePage() {
                   <motion.div key={category.id} initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }}>
                     <Link href={`/collection/wallcovering/${category.slug}`} className="group relative block aspect-[4/5] rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-500">
                       {heroImage ? (
-                        <img key={`${category.id}-${categoryImageIndex[category.id]}`} src={heroImage} alt={category.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
+                        <img 
+                          key={`${category.id}-${categoryImageIndex[category.id]}`} 
+                          src={heroImage} 
+                          alt={category.name} 
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                          loading="lazy" 
+                        />
                       ) : (
                         <div className="absolute inset-0 bg-krearte-gray-100 flex items-center justify-center">
                           <span className="text-8xl font-light text-krearte-gray-400">{category.name.charAt(0)}</span>
@@ -387,7 +426,6 @@ export default function HomePage() {
                         <div>
                           <h4 className="font-sans text-lg font-normal mb-3 group-hover:underline decoration-krearte-gray-300 underline-offset-4 transition-all">{product.name}</h4>
                           
-                          {/* ✅ PRICE DISPLAY - Pakai helper function */}
                           <div className="text-krearte-black font-normal text-base" dangerouslySetInnerHTML={{ __html: formatProductPrice(product) }} />
                           
                           {product.description && <p className="text-sm text-krearte-gray-500 font-light mt-2 line-clamp-2">{product.description}</p>}
@@ -423,25 +461,55 @@ export default function HomePage() {
             <h2 className="font-sans text-4xl md:text-5xl font-light">Gallery</h2>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]">
-            {[
-              { span: "md:row-span-2 md:col-span-2", label: "Featured Installation" },
-              { span: "md:col-span-1", label: "Detail Shot 1" },
-              { span: "md:col-span-1", label: "Detail Shot 2" },
-              { span: "md:col-span-1", label: "Texture Close-up" },
-              { span: "md:col-span-1 md:row-span-2", label: "Room View" },
-              { span: "md:col-span-2", label: "Pattern Detail" },
-            ].map((item, index) => (
-              <motion.div key={index} initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, margin: "-50px" }} transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }} className={`relative group overflow-hidden bg-krearte-gray-100 rounded-lg ${item.span} cursor-pointer`}>
-                <div className="w-full h-full flex items-center justify-center text-krearte-gray-400 group-hover:scale-105 transition-transform duration-700">
-                  <span className="text-sm font-light">{item.label}</span>
-                </div>
-                <div className="absolute inset-0 bg-krearte-black/0 group-hover:bg-krearte-black/40 transition-colors duration-500 flex items-center justify-center rounded-lg">
-                  <span className="text-krearte-white text-sm font-light opacity-0 group-hover:opacity-100 transition-opacity duration-500 tracking-widest uppercase">View Project</span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          {loadingGallery ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="animate-pulse bg-krearte-gray-200 rounded-lg" />
+              ))}
+            </div>
+          ) : galleryItems.length === 0 ? (
+            <div className="text-center py-24">
+              <p className="text-krearte-gray-500 font-light">No gallery items found</p>
+              <Link href="/admin/gallery" className="text-krearte-black font-medium underline mt-4 inline-block">Add Gallery Items in Admin</Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px]">
+              {galleryItems.map((item, index) => {
+                // Layout pattern: besar, kecil, kecil, kecil, besar vertikal, lebar
+                const spanClass = index === 0 ? "md:row-span-2 md:col-span-2" :
+                                  index === 4 ? "md:col-span-1 md:row-span-2" :
+                                  index === 5 ? "md:col-span-2" :
+                                  "md:col-span-1";
+                
+                return (
+                  <motion.div 
+                    key={item.id} 
+                    initial={{ opacity: 0, scale: 0.95 }} 
+                    whileInView={{ opacity: 1, scale: 1 }} 
+                    viewport={{ once: true, margin: "-50px" }} 
+                    transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }} 
+                    className={`relative group overflow-hidden bg-krearte-gray-100 rounded-lg ${spanClass} cursor-pointer`}
+                  >
+                    {item.imageUrl ? (
+                      <img 
+                        src={item.imageUrl} 
+                        alt={item.title} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-krearte-gray-400">
+                        <span className="text-sm font-light">{item.title}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-krearte-black/0 group-hover:bg-krearte-black/40 transition-colors duration-500 flex items-center justify-center rounded-lg">
+                      <span className="text-krearte-white text-sm font-light opacity-0 group-hover:opacity-100 transition-opacity duration-500 tracking-widest uppercase">View Project</span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
           
           <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.4 }} className="text-center mt-16">
             <Link href="/gallery" className="inline-flex items-center text-krearte-black font-medium border-b border-krearte-black pb-0.5 hover:border-krearte-gray-400 transition-colors">
