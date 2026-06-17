@@ -7,31 +7,7 @@ export const runtime = "nodejs";
 export const revalidate = 0;
 
 // =========================
-// ✅ HELPER: Check if material is physical
-// =========================
-function isPhysicalMaterial(material: any): boolean {
-  const category = (material.category || "").toLowerCase();
-  const name = (material.name || "").toLowerCase();
-  
-  const price = Number(material.pricePerM2) || 0;
-
-  const excludedKeywords = [
-    "service", "add-on", "addon", "jasa", 
-    "print", "design", "redesign", "sample",
-    "custom", "fee", "biaya"
-  ];
-
-  const hasExcludedKeyword = excludedKeywords.some(keyword => 
-    category.includes(keyword) || name.includes(keyword)
-  );
-
-  const MIN_MATERIAL_PRICE = 50000;
-  
-  return price >= MIN_MATERIAL_PRICE && !hasExcludedKeyword;
-}
-
-// =========================
-// ✅ GET - Fetch all products WITH price range
+// ✅ GET - Fetch all products WITH price range (IMPROVED)
 // =========================
 export async function GET() {
   try {
@@ -40,94 +16,160 @@ export async function GET() {
     await prisma.$connect();
     console.log('✅ Database connected');
 
-    console.log('📦 Fetching products...');
+    // ✅ Fetch products
     const products = await prisma.product.findMany({
       orderBy: { createdAt: "desc" },
       include: { sizes: true },
     });
 
-    console.log(`✅ Found ${products.length} products`);
+    console.log(`📦 Found ${products.length} products`);
 
-    const productsWithPriceRange = await Promise.all(
-      products.map(async (product) => {
-        try {
-          const materialIds = product.availableMaterialIds || [];
+    // ✅ Fetch ALL materials once (lebih efisien, tidak query per product)
+    const allMaterials = await prisma.material.findMany({
+      select: { 
+        id: true, 
+        name: true, 
+        category: true, 
+        pricePerM2: true, 
+        waste: true 
+      },
+    });
 
-          console.log(`\n[Product: ${product.name}]`);
-          console.log(`  - Material IDs count: ${materialIds.length}`);
+    console.log(`📦 Loaded ${allMaterials.length} materials from DB`);
 
-          if (!materialIds || materialIds.length === 0) {
-            console.log(`  - ⚠️ No materials linked`);
-            return {
-              ...product,
-              priceRange: { min: product.price || 0, max: product.price || 0 },
-              physicalMaterialCount: 0,
-            };
-          }
+    // ✅ Create material map for faster lookup
+    const materialMap = new Map(allMaterials.map(m => [m.id, m]));
 
-          console.log(`  - Fetching materials from DB...`);
-          const materials = await prisma.material.findMany({
-            where: { id: { in: materialIds } },
-            select: { 
-              id: true, 
-              name: true, 
-              category: true, 
-              pricePerM2: true, 
-              waste: true 
-            },
-          });
+    const productsWithPriceRange = products.map((product) => {
+      try {
+        const materialIds = product.availableMaterialIds || [];
+        const basePrice = Number(product.price) || 0;
 
-          console.log(`  - Materials found: ${materials.length}`);
+        // ✅ LOGGING: Detail per product
+        console.log(`\n[Product: ${product.name}]`);
+        console.log(`  - Material IDs count: ${materialIds.length}`);
+        console.log(`  - Base price: Rp ${basePrice.toLocaleString('id-ID')}`);
 
-          const physicalMaterials = materials.filter(isPhysicalMaterial);
-          console.log(`  - Physical materials: ${physicalMaterials.length}`);
-
-          const materialsToUse = physicalMaterials.length > 0 ? physicalMaterials : materials;
-
-          if (materialsToUse.length === 0) {
-            console.log(`  - ⚠️ No valid materials, using base price`);
-            return {
-              ...product,
-              priceRange: { min: product.price || 0, max: product.price || 0 },
-              physicalMaterialCount: 0,
-            };
-          }
-
-          materialsToUse.forEach(m => {
-            console.log(`    • ${m.name}: Rp ${m.pricePerM2}`);
-          });
-
-          const prices = materialsToUse.map((m) => {
-            const basePrice = Number(m.pricePerM2) || 0;
-            return basePrice;
-          });
-
-          const minPrice = Math.min(...prices);
-          const maxPrice = Math.max(...prices);
-
-          console.log(`  - ✅ Price Range: Rp ${minPrice} - Rp ${maxPrice}`);
-
+        // ❌ Kalau tidak ada material IDs, pakai base price
+        if (!materialIds || materialIds.length === 0) {
+          console.log(`  - ⚠️ No materials linked, using base price`);
           return {
             ...product,
-            priceRange: {
-              min: Math.round(minPrice),
-              max: Math.round(maxPrice),
-            },
-            physicalMaterialCount: physicalMaterials.length,
-            totalMaterialCount: materials.length,
-          };
-        } catch (err) {
-          console.error(`[Product: ${product.id}] Error:`, err);
-          return {
-            ...product,
-            priceRange: { min: product.price || 0, max: product.price || 0 },
+            priceRange: { min: basePrice, max: basePrice },
             physicalMaterialCount: 0,
+            totalMaterialCount: 0,
           };
         }
-      })
-    );
 
-    console.log(`\n✅ [Products API] Success: ${productsWithPriceRange.length} products`);
+        // ✅ Filter materials yang ID-nya ada di availableMaterialIds DAN ada di database
+        const linkedMaterials = materialIds
+          .map(id => materialMap.get(id))
+          .filter((m): m is NonNullable<typeof m> => m !== undefined);
+
+        console.log(`  - Linked materials found in DB: ${linkedMaterials.length}/${materialIds.length}`);
+
+        // ❌ Kalau tidak ada materials yang valid di DB, pakai base price
+        if (linkedMaterials.length === 0) {
+          console.log(`  - ⚠️ No linked materials found in DB, using base price`);
+          return {
+            ...product,
+            priceRange: { min: basePrice, max: basePrice },
+            physicalMaterialCount: 0,
+            totalMaterialCount: materialIds.length,
+          };
+        }
+
+        // ✅ Filter materials dengan harga > 0 (exclude materials dengan harga 0)
+        const materialsWithPrice = linkedMaterials.filter(m => {
+          const price = Number(m.pricePerM2) || 0;
+          return price > 0;
+        });
+
+        console.log(`  - Materials with price > 0: ${materialsWithPrice.length}`);
+
+        // Log prices untuk debug
+        materialsWithPrice.forEach(m => {
+          console.log(`    • ${m.name}: Rp ${Number(m.pricePerM2).toLocaleString('id-ID')}`);
+        });
+
+        // ❌ Kalau tidak ada materials dengan harga > 0, pakai base price
+        if (materialsWithPrice.length === 0) {
+          console.log(`  - ⚠️ No materials with price > 0, using base price`);
+          return {
+            ...product,
+            priceRange: { min: basePrice, max: basePrice },
+            physicalMaterialCount: 0,
+            totalMaterialCount: linkedMaterials.length,
+          };
+        }
+
+        // ✅ Filter physical materials (exclude services/add-ons)
+        const excludedKeywords = [
+          "service", "add-on", "addon", "jasa", 
+          "print", "design", "redesign", "sample",
+          "custom", "fee", "biaya"
+        ];
+
+        const physicalMaterials = materialsWithPrice.filter(m => {
+          const category = (m.category || "").toLowerCase();
+          const name = (m.name || "").toLowerCase();
+          
+          const hasExcludedKeyword = excludedKeywords.some(keyword => 
+            category.includes(keyword) || name.includes(keyword)
+          );
+          
+          return !hasExcludedKeyword;
+        });
+
+        console.log(`  - Physical materials: ${physicalMaterials.length}`);
+
+        // ✅ Pilih materials yang akan dipakai untuk kalkulasi
+        // Priority: physical materials > all materials with price
+        const materialsToUse = physicalMaterials.length > 0 
+          ? physicalMaterials 
+          : materialsWithPrice;
+
+        // ✅ Calculate price range
+        const prices = materialsToUse.map((m) => Number(m.pricePerM2) || 0);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+
+        console.log(`  - ✅ Price Range: Rp ${minPrice.toLocaleString('id-ID')} - Rp ${maxPrice.toLocaleString('id-ID')}`);
+
+        return {
+          ...product,
+          priceRange: {
+            min: Math.round(minPrice),
+            max: Math.round(maxPrice),
+          },
+          physicalMaterialCount: physicalMaterials.length,
+          totalMaterialCount: linkedMaterials.length,
+        };
+      } catch (err: any) {
+        console.error(`[Product: ${product.id}] Error:`, err?.message);
+        const basePrice = Number(product.price) || 0;
+        return {
+          ...product,
+          priceRange: { min: basePrice, max: basePrice },
+          physicalMaterialCount: 0,
+          totalMaterialCount: 0,
+        };
+      }
+    });
+
+    console.log(`\n✅ [Products API] Success: ${productsWithPriceRange.length} products processed`);
+
+    // ✅ Summary stats
+    const withPriceRange = productsWithPriceRange.filter(p => p.priceRange.min > 0).length;
+    const withBasePrice = productsWithPriceRange.filter(p => 
+      p.priceRange.min === p.priceRange.max && p.priceRange.min === Number(p.price)
+    ).length;
+    const zeroPrice = productsWithPriceRange.filter(p => p.priceRange.min === 0).length;
+
+    console.log(`📊 Stats:`);
+    console.log(`  - With price range (from materials): ${withPriceRange}`);
+    console.log(`  - Using base price: ${withBasePrice}`);
+    console.log(`  - Zero price: ${zeroPrice}`);
 
     return NextResponse.json({
       success: true,

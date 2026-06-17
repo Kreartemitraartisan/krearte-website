@@ -55,6 +55,28 @@ model Category {
   @@index([collectionType, isActive])
 }
 
+// ==================== DESIGNER MODEL ====================
+model Designer {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  bio           String?
+  photo         String?
+  instagram     String?
+  website       String?
+  isActive      Boolean   @default(true)
+  sortOrder     Int       @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  products      Product[]
+
+  @@index([slug])
+  @@index([isActive, sortOrder])
+}
+
 // ==================== MATERIAL MODEL ====================
 model Material {
   id            String   @id @default(cuid())
@@ -103,6 +125,10 @@ model Product {
 
   category_slug  String?  @map("category_slug")
 
+  // ✅ NEW: Relasi ke Designer
+  designerId     String?
+  designer       Designer? @relation(fields: [designerId], references: [id], onDelete: SetNull)
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -116,6 +142,7 @@ model Product {
   @@index([category])
   @@index([collectionType])
   @@index([name])
+  @@index([designerId])
 }
 
 // ==================== PRODUCT SIZE MODEL ====================
