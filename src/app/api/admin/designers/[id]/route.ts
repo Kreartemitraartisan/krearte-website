@@ -6,10 +6,15 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export const dynamic = "force-dynamic";
 
+// ✅ FIX: Definisikan interface untuk params
+interface RouteParams {
+  params: Promise<{ id: string }>;
+}
+
 // PUT - Update designer
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: RouteParams
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,11 +22,14 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ FIX: Await params (Next.js 15)
+    const { id } = await params;
+
     const body = await request.json();
     const { name, slug, bio, photo, instagram, website, sortOrder } = body;
 
     const designer = await prisma.designer.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: name?.trim(),
         slug: slug?.trim().toLowerCase(),
@@ -47,7 +55,7 @@ export async function PUT(
 // DELETE - Delete designer
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: RouteParams
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -55,8 +63,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ FIX: Await params (Next.js 15)
+    const { id } = await params;
+
     await prisma.designer.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true, message: "Designer deleted" });
